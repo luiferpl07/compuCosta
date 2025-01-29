@@ -6,7 +6,7 @@ import Loading from "../ui/Loading";
 import Container from "../ui/Container";
 import CategoryFilters from "../ui/CategoryFilters";
 import ProductCard from "../ui/ProductCard";
-import { ProductProps } from "../../type";
+import { Product } from "../../type";
 
 const Categoria = () => {
   const { id } = useParams();
@@ -14,10 +14,12 @@ const Categoria = () => {
   const [products, setProducts] = useState([]);
   useEffect(() => {
     const fetchData = async () => {
-      const endpoint = `${config?.baseUrl}/categorias/${id}`;
+      const endpoint = `${config?.baseUrl}${config?.apiPrefix}/categories/${id}`;
+      console.log('Endpoint being called:', endpoint); // Verificar la URL construida
       try {
         setLoading(true);
         const data = await getData(endpoint);
+        console.log('Data received:', data); // Ver qué datos estás recibiendo
         setProducts(data);
       } catch (error) {
         console.error("Error fetching data", error);
@@ -46,8 +48,8 @@ const Categoria = () => {
           <div className="flex items-start gap-10">
             <CategoryFilters id={id} />
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-              {products?.map((item: ProductProps) => (
-                <ProductCard item={item} key={item?._id} />
+              {products?.map((item: Product) => (
+                <ProductCard item={item} key={item?.id} />
               ))}
             </div>
           </div>

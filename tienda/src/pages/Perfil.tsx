@@ -1,27 +1,48 @@
+import { useState, useEffect } from "react";
 import { onAuthStateChanged } from "firebase/auth";
-import { useEffect } from "react";
 import { auth } from "../lib/firebase";
-import { store } from "../lib/store";
-import Container from "../ui/Container";
 import Registration from "../ui/Registration";
 import UserInfo from "../ui/UserInfo";
+import Container from "../ui/Container";
 import Loading from "../ui/Loading";
+
 const Perfil = () => {
-  const { currentUser, getUserInfo, isLoading } = store();
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    const unSub = onAuthStateChanged(auth, (user) => {
-      getUserInfo(user?.uid);
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // User is signed in, fetch additional user info if needed
+        setCurrentUser({
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName
+        });
+      } else {
+        // User is signed out
+        setCurrentUser(null);
+      }
+      setLoading(false);
     });
-    return () => {
-      unSub();
-    };
-  }, [getUserInfo]);
+
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
+  }, []);
+
+  if (loading) {
+    return <Loading />;
+  }
+
   return (
     <Container>
-      {currentUser ? <UserInfo currentUser={currentUser} /> : <Registration />}
-
-      {isLoading && <Loading />}
+      {currentUser ? (
+        <UserInfo currentUser={currentUser} />
+      ) : (
+        <Registration />
+      )}
     </Container>
   );
 };
-export default Perfil
+
+export default Perfil;

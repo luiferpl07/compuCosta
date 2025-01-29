@@ -2,20 +2,20 @@
 import { useEffect, useState } from "react";
 import { config } from "../../config";
 import { getData } from "../lib";
-import { ProductProps } from "../../type";
+import { Product } from "../../type";
 import ProductCard from "./ProductCard";
 import ReactPaginate from "react-paginate";
 
 interface ItemsProps {
-  currentItems: ProductProps[];
+  currentItems: Product[];
 }
 
 const Items = ({ currentItems }: ItemsProps) => {
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5">
       {currentItems &&
-        currentItems?.map((item: ProductProps) => (
-          <ProductCard key={item?._id} item={item} />
+        currentItems?.map((item: Product) => (
+          <ProductCard key={item?.id} item={item} />
         ))}
     </div>
   );
@@ -26,7 +26,7 @@ const Pagination = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      const endpoint = `${config?.baseUrl}/productos`;
+      const endpoint =  `${config?.baseUrl}${config?.apiPrefix}/products`;
       try {
         const data = await getData(endpoint);
         setProducts(data);
@@ -47,9 +47,7 @@ const Pagination = () => {
   const handlePageClick = (event: any) => {
     const newOffset = (event.selected * itemsPerPage) % products.length;
     const newStart = newOffset + 1;
-    // console.log(
-    //   `User requested page number ${event.selected}, which is offset ${newOffset}`
-    // );
+   
     setItemOffset(newOffset);
     setItemStart(newStart);
   };
@@ -68,7 +66,7 @@ const Pagination = () => {
           pageLinkClassName="w-9 h-9 border[1px] border-lightColor hover:border-gray-500 duration-300 flex justify-center items-center"
           pageClassName="mr-6"
           containerClassName="flex text-base font-semibold py-10"
-          activeClassName="bg-black text-white"
+          activeClassName="bg-textoRojo text-white"
         />
         <p>
         Productos del {itemStart} al {Math.min(endOffset, products?.length)}{" "}

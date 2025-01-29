@@ -9,7 +9,7 @@ const Hightlights = () => {
   const [highlightsData, setHighlightsData] = useState([]);
   useEffect(() => {
     const fetchData = async () => {
-      const endpoint = `${config?.baseUrl}/highlights`;
+      const endpoint = `{config?.baseUrl}${config?.apiPrefix}/highlights`;
       try {
         const data = await getData(endpoint);
         setHighlightsData(data);

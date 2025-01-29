@@ -1,47 +1,49 @@
 import { MdOutlineStarOutline } from "react-icons/md";
-import { ProductProps } from "../../type";
+import { Product } from "../../type";
 import AddToCartBtn from "./AddToCartBtn";
 import { useState } from "react";
-import {
-  Button,
-  Dialog,
-  DialogPanel,
-  DialogTitle,
-  Transition,
-  TransitionChild,
-} from "@headlessui/react";
-import FormattedPrice from "./FormatoPrecio";
 import ProductCardSideNav from "./ProductCardSideNav";
 import { useNavigate } from "react-router-dom";
+import { config } from "../../config"; // Asegúrate de importar la configuración
 
 interface Props {
-  item: ProductProps;
-  setSearchText?: (value: string) => void; // Aseguramos el tipo
+  item: Product;
+  setSearchText?: (value: string) => void;
 }
 
 const ProductCard = ({ item, setSearchText }: Props) => {
   const [isOpen, setIsOpen] = useState(false);
   const navigation = useNavigate();
 
-  // Abrir y cerrar modal
   const open = () => setIsOpen(true);
-  const close = () => setIsOpen(false);
 
-  // Cálculo del porcentaje de descuento con validación
-  const percentage =
-    item?.regularPrice && item?.discountedPrice
-      ? ((item.regularPrice - item.discountedPrice) / item.regularPrice) * 100
-      : 0;
+  const precio = item?.reviews?.[0]?.calificacion || item?.precio || 0;
+  const percentage = precio > 0 ? ((precio - (item?.precio || 0)) / precio) * 100 : 0;
 
-  // Navegación al producto
+  // Generar URL completa de la imagen
+  const mainImage = item?.imagenes?.find(img => img.es_principal)?.url  
+    ? `${config?.baseUrl}${item.imagenes.find(img => img.es_principal)?.url}`
+    : item?.imagenes?.[0]?.url  
+      ? `${config?.baseUrl}${item.imagenes[0].url}`
+      : 'ruta-a-imagen-por-defecto';
+
+  // Generar alt text de la imagen
+  const fallbackImageAlt = item?.imagenes?.find(img => img.es_principal)?.alt_text ||  
+                           item?.imagenes?.[0]?.alt_text ||  
+                           `Imagen del producto ${item?.nombre}`;
+
   const handleProduct = () => {
-    navigation(`/productos/${item?._id}`);
-    setSearchText?.(""); // Aseguramos que setSearchText sea una función antes de llamarla
+    navigation(`/productos/${item.id}`);
+    setSearchText?.("");
   };
 
+  const reviews = item?.reviews || [];
+  const averageRating = reviews.length > 0
+    ? reviews.reduce((acc, review) => acc + review.calificacion, 0) / reviews.length
+    : 0;
+
   return (
-    <div className="border border-gray-200 rounded-lg p-1 overflow-hidden hover:border-amber-300  duration-200 cursor-pointer">
-      {/* Imagen del producto y modal de descuento */}
+    <div className="border border-gray-200 rounded-lg p-1 overflow-hidden hover:border-amber-300 duration-200 cursor-pointer">
       <div className="w-full h-60 relative p-2 group">
         {percentage > 0 && (
           <span
@@ -53,80 +55,28 @@ const ProductCard = ({ item, setSearchText }: Props) => {
         )}
         <img
           onClick={handleProduct}
-          src={item?.images[0]}
-          alt="Imagen del producto"
+          src={mainImage}
+          alt={fallbackImageAlt}
           className="w-full h-full rounded-md object-cover group-hover:scale-110 duration-300"
         />
         <ProductCardSideNav product={item} />
       </div>
 
-      {/* Información del producto */}
       <div className="flex flex-col gap-2 px-2 pb-2">
-        <h3 className="text-xs uppercase font-semibold text-textoBlanco/50">
-          {item?.overView}
+        <h3 className="text-xs uppercase font-semibold text-textoNegro/70">
+          {item?.categorias?.[0]?.nombre || 'Sin categoría'}
         </h3>
-        <h2 className="text-lg font-bold line-clamp-2">{item?.name}</h2>
-        <div className="text-base text-textoBlanco/50 flex items-center">
-          <MdOutlineStarOutline />
-          <MdOutlineStarOutline />
-          <MdOutlineStarOutline />
-          <MdOutlineStarOutline />
-          <MdOutlineStarOutline />
+        <h2 className="text-lg font-bold line-clamp-2">{item?.nombre || 'Producto sin nombre'}</h2>
+        <div className="text-base text-textoRojo flex items-center">
+          {[...Array(5)].map((_, index) => (
+            <MdOutlineStarOutline
+              key={index}
+              className={index < averageRating ? "text-yellow-400" : ""}
+            />
+          ))}
         </div>
         <AddToCartBtn product={item} />
       </div>
-
-      {/* Modal de ahorro */}
-      <Transition appear show={isOpen}>
-        <Dialog
-          as="div"
-          className="relative z-10 focus:outline-none"
-          onClose={close}
-          aria-label="Detalle del descuento"
-        >
-          <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
-            <div className="flex min-h-full items-center justify-center p-4">
-              <TransitionChild
-                enter="ease-out duration-300"
-                enterFrom="opacity-0 transform-[scale(95%)]"
-                enterTo="opacity-100 transform-[scale(100%)]"
-                leave="ease-in duration-200"
-                leaveFrom="opacity-100 transform-[scale(100%)]"
-                leaveTo="opacity-0 transform-[scale(95%)]"
-              >
-                <DialogPanel className="w-full max-w-md rounded-xl bg-black backdrop-blur-2xl z-50 p-6">
-                  <DialogTitle
-                    as="h3"
-                    className="text-base/7 font-medium text-whiteText"
-                  >
-                    ¡Date prisa!
-                  </DialogTitle>
-                  <p className="mt-2 text-sm/6 text-white/50">
-                    Vas a ahorrar{" "}
-                    <span className="text-textAzulclaro">
-                      <FormattedPrice
-                        amount={item?.regularPrice - item?.discountedPrice}
-                      />
-                    </span>{" "}
-                    con este producto.
-                  </p>
-                  <p className="text-sm/6 text-white/50">
-                    Aprovecha esta increíble oferta antes de que termine.
-                  </p>
-                  <div className="mt-4">
-                    <Button
-                      className="inline-flex items-center gap-2 rounded-md bg-gray-700 py-1.5 px-3 text-sm/6 font-semibold text-white shadow-inner shadow-white/10 focus:outline-none data-[hover]:bg-gray-600 data-[open]:bg-gray-700 data-[focus]:outline-1 data-[focus]:outline-white"
-                      onClick={close}
-                    >
-                      ¡Entendido, gracias!
-                    </Button>
-                  </div>
-                </DialogPanel>
-              </TransitionChild>
-            </div>
-          </div>
-        </Dialog>
-      </Transition>
     </div>
   );
 };

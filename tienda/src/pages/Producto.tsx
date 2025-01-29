@@ -1,32 +1,33 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { config } from "../../config";
-import { ProductProps } from "../../type";
+import { Product } from "../../type";
 import { getData } from "../lib";
 import Loading from "../ui/Loading";
 import Container from "../ui/Container";
-import _ from "lodash";
+import _, { divide } from "lodash";
 import PriceTag from "../ui/PriceTag";
 import { MdOutlineStarOutline } from "react-icons/md";
 import { FaRegEye } from "react-icons/fa";
-import FormattedPrice from "../ui/FormatoPrecio";
+import FormatoPrecio from "../ui/FormatoPrecio";
 import { IoClose } from "react-icons/io5";
 import AddToCartBtn from "../ui/AddToCartBtn";
 import { productPayment } from "../assets";
 import ProductCard from "../ui/ProductCard";
 import CategoryFilters from "../ui/CategoryFilters";
 
+
 const Producto = () => {
-  const [productData, setProductData] = useState<ProductProps | null>(null);
-  const [allProducts, setAllProducts] = useState<ProductProps[]>([]);
+  const [productData, setProductData] = useState<Product | null>(null);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [imgUrl, setImgUrl] = useState("");
-  const [color, setColor] = useState("");
+  const [selectedColor, setSelectedColor] = useState<Product["colores"][0] | null>(null);
   const { id } = useParams();
 
   const endpoint = id
-    ? `${config?.baseUrl}/productos/${id}`
-    : `${config?.baseUrl}/productos/`;
+    ? `${config?.baseUrl}${config?.apiPrefix}/products/${id}`
+    : `${config?.baseUrl}${config?.apiPrefix}/products`;
 
   useEffect(() => {
     const fetchData = async () => {
@@ -34,9 +35,11 @@ const Producto = () => {
         setLoading(true);
         const data = await getData(endpoint);
         if (id) {
+          console.log("Datos del producto:", data); // Depuración
           setProductData(data);
           setAllProducts([]);
         } else {
+          console.log("Lista de productos:", data); // Depuración
           setAllProducts(data);
           setProductData(null);
         }
@@ -51,8 +54,12 @@ const Producto = () => {
 
   useEffect(() => {
     if (productData) {
-      setImgUrl(productData?.images[0]);
-      setColor(productData?.colors[0]);
+      setImgUrl(
+        `${config?.baseUrl}${productData?.imagenes?.find(img => img.es_principal)?.url}`
+        ? `${config?.baseUrl}${productData?.imagenes?.find(img => img.es_principal)?.url}`
+        : ""
+      );
+      setSelectedColor(productData?.colores?.[0] || null);
     }
   }, [productData]);
 
@@ -66,16 +73,16 @@ const Producto = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
               <div className="flex flex-start">
                 <div>
-                  {productData?.images?.map((item, index) => (
+                  {productData?.imagenes?.map((item) => (
                     <img
-                      src={item}
-                      alt="img"
-                      key={index}
+                      src={item.url}
+                      alt={item.alt_text || "Imagen del producto"}
+                      key={item.id}
                       className={`w-24 cursor-pointer opacity-80 hover:opacity-100 duration-300 ${
-                        imgUrl === item &&
+                        imgUrl === item.url &&
                         "border border-gray-500 rounded-sm opacity-100"
                       }`}
-                      onClick={() => setImgUrl(item)}
+                      onClick={() => setImgUrl(item.url)}
                     />
                   ))}
                 </div>
@@ -84,76 +91,77 @@ const Producto = () => {
                 </div>
               </div>
               <div className="flex flex-col gap-4">
-                <h2 className="text-3xl font-bold">{productData?.name}</h2>
+                <h2 className="text-3xl font-bold">{productData?.nombre}</h2>
                 <div className="flex items-center justify-between">
                   <PriceTag
-                    regularPrice={productData?.regularPrice}
-                    discountedPrice={productData?.discountedPrice}
+                    precio={productData?.precio}
+                    precioDescuento={productData?.precioDescuento}
                     className="text-xl"
                   />
                   <div className="flex items-center gap-1">
-                    <div className="text-base text-textoGrisClaro flex items-center">
-                      <MdOutlineStarOutline />
-                      <MdOutlineStarOutline />
-                      <MdOutlineStarOutline />
-                      <MdOutlineStarOutline />
-                      <MdOutlineStarOutline />
+                    <div className="text-base text-lightText flex items-center">
+                      {[...Array(5)].map((_, index) => (
+                        <MdOutlineStarOutline
+                          key={index}
+                          className={index < productData?.puntuacionPromedio ? "text-yellow-400" : ""}
+                        />
+                      ))}
                     </div>
-                    <p className="text-base font-semibold">{`(${productData?.reviews} reseñas)`}</p>
+                    <p className="text-base font-semibold">{`(${productData?.reseñasCount} reseñas)`}</p>
                   </div>
                 </div>
                 <p className="flex items-center">
-                  <FaRegEye className="mr-1" />{" "}
+                  <FaRegEye className="mr-1" />
                   <span className="font-semibold mr-1">
-                    {productData?.reviews}
-                  </span>{" "}
-                  personas están viendo este producto ahora mismo
+                    {productData?.reseñasCount}
+                  </span>
+                  personas están viendo esto ahora mismo
                 </p>
                 <p>
-                  Estás ahorrando{" "}
+                  Estás ahorrando
                   <span className="text-base font-semibold text-green-500">
-                    <FormattedPrice
+                    <FormatoPrecio
                       amount={
-                        productData?.regularPrice! -
-                        productData?.discountedPrice!
+                        (productData?.precio || 0) -
+                        (productData?.precioDescuento || 0)
                       }
                     />
                   </span>{" "}
-                  en esta compra
+                    al comprar
                 </p>
                 <div>
-                  {color && (
+                  {selectedColor && (
                     <p>
-                      Color:{" "}
+                      Color: {" "}
                       <span
                         className="font-semibold capitalize"
-                        style={{ color: color }}
+                        style={{ color: selectedColor.codigoHex }}
                       >
-                        {color}
+                        {selectedColor.nombre}
                       </span>
                     </p>
                   )}
                   <div className="flex items-center gap-x-3">
-                    {productData?.colors.map((item) => (
+                    {productData?.colores?.map((item) => (
                       <div
-                        key={item}
+                        key={item.id}
                         className={`${
-                          item === color
-                            ? "border border-black/50 p-1 rounded-full"
+                          item.id === selectedColor?.id
+                            ? "border border-black p-1 rounded-full"
                             : "border-transparent"
                         }`}
                       >
                         <div
                           className="w-10 h-10 rounded-full cursor-pointer"
-                          style={{ backgroundColor: item }}
-                          onClick={() => setColor(item)}
+                          style={{ backgroundColor: item.codigoHex }}
+                          onClick={() => setSelectedColor(item)}
                         />
                       </div>
                     ))}
                   </div>
-                  {color && (
+                  {selectedColor && (
                     <button
-                      onClick={() => setColor("")}
+                      onClick={() => setSelectedColor(null)}
                       className="font-semibold mt-1 flex items-center gap-1 hover:text-red-600 duration-200"
                     >
                       <IoClose /> Limpiar
@@ -161,16 +169,21 @@ const Producto = () => {
                   )}
                 </div>
                 <p>
-                  Marca: <span className="font-medium">{productData?.brand}</span>
+                  Marca: {" "}
+                  <span className="font-medium">
+                    {productData?.marca?.nombre || "Sin marca"}
+                  </span>
                 </p>
                 <p>
-                  Categoría:{" "}
-                  <span className="font-medium">{productData?.category}</span>
+                  Categoría: {" "}
+                  <span className="font-medium">
+                    {productData?.categorias?.[0]?.nombre || "Sin categoría"}
+                  </span>
                 </p>
                 <AddToCartBtn
                   product={productData}
                   title="Comprar ahora"
-                  className="bg-textoAmarillo py-3 text-base text-textoRojo hover:scale-100 hover:text-textoAmarillo duration-200"
+                  className="bg-black/80 py-3 text-base text-gray-200 hover:scale-100 hover:text-white duration-200"
                 />
                 <div className="bg-[#f7f7f7] p-5 rounded-md flex flex-col items-center justify-center gap-2">
                   <img
@@ -179,7 +192,7 @@ const Producto = () => {
                     className="w-auto object-cover"
                   />
                   <p className="font-semibold">
-                    Pago seguro garantizado
+                    Garantía de pago seguro y protegido
                   </p>
                 </div>
               </div>
@@ -192,8 +205,8 @@ const Producto = () => {
                   Colección de productos
                 </p>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-                  {allProducts?.map((item: ProductProps) => (
-                    <ProductCard item={item} key={item?._id} />
+                  {allProducts?.map((item: Product) => (
+                    <ProductCard item={item} key={item.id} />
                   ))}
                 </div>
               </div>

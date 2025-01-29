@@ -17,8 +17,8 @@ const Carrito = () => {
   useEffect(() => {
     const totals = cartProduct.reduce(
       (sum, product) => {
-        sum.regular += product?.regularPrice * product?.quantity;
-        sum.discounted += product?.discountedPrice * product?.quantity;
+        sum.regular += product?.precio * product?.cantidad;
+        sum.discounted += product?.precioDescuento * product?.cantidad;
         return sum;
       },
       { regular: 0, discounted: 0 }
@@ -37,7 +37,7 @@ const Carrito = () => {
             <section className="lg:col-span-7">
               <div className=" divide-y divide-gray-200 border-b border-t border-gray-200">
                 {cartProduct.map((product) => (
-                  <CartProduct product={product} key={product?._id} />
+                  <CartProduct product={product} key={product?.id} />
                 ))}
               </div>
             </section>
@@ -109,14 +109,11 @@ const Carrito = () => {
             Carrito de compras
           </h1>
           <p className="text-lg max-w-[600px] text-center text-gray-600 tracking-wide leading-6">
-            Your cart is empty. Lorem ipsum, dolor sit amet consectetur
-            adipisicing elit. Repellendus libero ab nulla iure quibusdam
-            obcaecati debitis minima explicabo quidem tenetur ad, voluptate
-            iusto ratione natus. Maxime molestiae doloremque eaque nesciunt!
+          Actualmente no tienes productos en tu carrito. Agrega productos para comenzar a comprar.
           </p>
           <Link
             to={"/productos"}
-            className="bg-gray-800 text-gray-200 px-8 py-4 rounded-md hover:bg-black hover:text-white duration-200 uppercase text-sm font-semibold tracking-wide"
+            className="w-full mt-2 rounded-md border border-transparent px-8 py-3 text-base font-medium text-red-500 bg-gray-100 sm:w-auto hover:bg-textoRojo hover:text-white duration-200"
           >
             Ir a comprar
           </Link>

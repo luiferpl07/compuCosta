@@ -7,7 +7,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { FaMinus, FaPlus } from "react-icons/fa";
 import { Link } from "react-router-dom";
-import { OrderTypes, ProductProps } from "../../type";
+import { OrderTypes, Product } from "../../type";
 import { db } from "../lib/firebase";
 import { store } from "../lib/store";
 import Container from "../ui/Container";
@@ -113,17 +113,17 @@ const Pedidos = () => {
                                 </span>
                               </p>
                             </div>
-                            {order?.orderItems?.map((item: ProductProps) => (
+                            {order?.orderItems?.map((item: Product) => (
                               <div
-                                key={item?._id}
+                                key={item?.id}
                                 className="flex space-x-6 border-b border-gray-200 py-3"
                               >
                                 <Link
-                                  to={`/productos/${item?._id}`}
+                                  to={`/productos/${item?.id}`}
                                   className="h-20 w-20 flex-none sm:h-40 sm:w-40 rounded-lg bg-gray-100 border border-gray-300 hover:border-skyText overflow-hidden"
                                 >
                                   <img
-                                    src={item?.images[0]}
+                                    src={item?.imagenes[0]}
                                     alt="Imagen del producto"
                                     className="h-full w-full object-cover object-center hover:scale-110 duration-300"
                                   />
@@ -131,13 +131,13 @@ const Pedidos = () => {
                                 <div className="flex flex-auto flex-col">
                                   <div>
                                     <Link
-                                      to={`/productos/${item?._id}`}
+                                      to={`/productos/${item?.id}`}
                                       className="font-medium text-gray-900"
                                     >
-                                      {item?.name}
+                                      {item?.nombre}
                                     </Link>
                                     <p className="mt-2 text-sm text-gray-900">
-                                      {item?.description}
+                                      {item?.descripcionCorta}
                                     </p>
                                   </div>
                                   <div className="mt-6 flex flex-1 items-end">

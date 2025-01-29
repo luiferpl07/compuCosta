@@ -10,7 +10,7 @@ const CategoryFilters = ({ id }: { id: string | undefined }) => {
   const [loading, setLoading] = useState(false);
   useEffect(() => {
     const fetchData = async () => {
-      const endpoint = `${config?.baseUrl}/categorias`;
+      const endpoint = `${config?.baseUrl}${config?.apiPrefix}/categories`;
       try {
         setLoading(true);
         const data = await getData(endpoint);
@@ -45,15 +45,15 @@ const CategoryFilters = ({ id }: { id: string | undefined }) => {
           ) : (
             categories?.map((item: CategoryProps) => (
               <Link
-                to={`/categorias/${item?._base}`}
-                key={item?._id}
+                to={`/categorias/${item?.slug}`}
+                key={item?.id}
                 className={`text-base font-medium text-start underline underline-offset-2 decoration-[1px] decoration-transparent hover:decoration-gray-950 hover:text-black duration-200 ${
-                  item?._base === id
+                  item?.slug === id
                     ? "text-textoRojo decoration-text-textoRojo"
                     : "text-textoNegro"
                 }`}
               >
-                {item?.name}
+                {item?.nombre}
               </Link>
             ))
           )}

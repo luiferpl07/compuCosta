@@ -32,7 +32,7 @@ const BannerCategories = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      const endpoint = `${config?.baseUrl}/categorias`;
+      const endpoint = `${config?.baseUrl}${config?.apiPrefix}/categories`;
       try {
         const data = await getData(endpoint);
         setCategories(data);
@@ -54,16 +54,16 @@ const BannerCategories = () => {
     >
       {categories.map((item: CategoryProps) => (
         <Link
-          key={item?._id}
-          to={`categorias/${item?._base}`}
+          key={item?.id}
+          to={`categorias/${item?.slug}`}
           className="flex items-center gap-x-2 p-1 border border-gray-100 mr-1 flex-1 rounded-md hover:border-twxroAzukCielo hover:shadow-lg"
         >
           <img
-            src={item?.image}
+            src={item?.imagen}
             alt="categoryImage"
             className="w-10 h-10 rounded-full object-cover"
           />
-          <p className="text-sm font-semibold"> {item?.name}</p>
+          <p className="text-sm font-semibold"> {item?.nombre}</p>
         </Link>
       ))}
     </Carousel>

@@ -1,5 +1,5 @@
 import { twMerge } from "tailwind-merge";
-import { ProductProps } from "../../type";
+import { Product } from "../../type";
 import { store } from "../lib/store";
 import toast from "react-hot-toast";
 import { useEffect, useState } from "react";
@@ -14,37 +14,39 @@ const AddToCartBtn = ({
 }: {
   className?: string;
   title?: string;
-  product?: ProductProps;
+  product?: Product;
   showPrice?: boolean;
 }) => {
-  const [existingProduct, setExistingProduct] = useState<ProductProps | null>(null);
+  const [existingProduct, setExistingProduct] = useState<Product | null>(null);
   const { addToCart, cartProduct, decreaseQuantity } = store();
 
   useEffect(() => {
     // Busca el producto en el carrito si existe
-    const availableItem = cartProduct.find((item) => item?._id === product?._id);
+    const availableItem = cartProduct.find((item) => item?.id === product?.id);
     setExistingProduct(availableItem || null);
   }, [product, cartProduct]);
 
   const handleAddToCart = () => {
     if (product) {
-      addToCart(product); // Agrega el producto al carrito
-      toast.success(`${product?.name.substring(0, 10)} agregado exitosamente!`);
+      // Solo agregamos el producto, la cantidad se maneja en el store
+      addToCart(product);  
+      toast.success(`${product?.nombre.substring(0, 10)} agregado exitosamente!`);
     } else {
       toast.error("Producto no está definido!");
     }
   };
-
+  
   const handleDeleteProduct = () => {
     if (existingProduct) {
-      if (existingProduct?.quantity > 1) {
-        decreaseQuantity(existingProduct?._id); // Disminuye la cantidad
-        toast.success(`${existingProduct?.name.substring(0, 10)} disminuido exitosamente`);
+      if (existingProduct.cantidad > 1) {
+        decreaseQuantity(existingProduct.id);  // Disminuir la cantidad en el carrito
+        toast.success(`${existingProduct.nombre.substring(0, 10)} disminuido exitosamente`);
       } else {
         toast.error("No puedes disminuir menos de 1");
       }
     }
   };
+  
 
   const newClassName = twMerge(
     "bg-[#efefef] uppercase text-xs py-3 text-center rounded-full font-semibold hover:bg-textoRojo hover:text-white hover:scale-105 duration-200 cursor-pointer",
@@ -54,26 +56,26 @@ const AddToCartBtn = ({
   const getRegularPrice = () => {
     // Si el producto está en el carrito, se multiplica por la cantidad
     if (existingProduct) {
-      return existingProduct?.regularPrice * existingProduct?.quantity;
+      return existingProduct.precio * existingProduct.cantidad;
     }
-    return product?.regularPrice || 0;
+    return product?.precio ?? 0; // Usamos el valor de precio o 0 si es undefined
   };
-
-  const getDiscountedPrice = () => {
-    // Si el producto está en el carrito, se multiplica por la cantidad
-    if (existingProduct) {
-      return existingProduct?.discountedPrice * existingProduct?.quantity;
-    }
-    return product?.discountedPrice || 0;
-  };
+  
+const getDiscountedPrice = () => {
+  if (existingProduct) {
+    // Verificar que precioDescuento no es undefined
+    return existingProduct.precioDescuento ?? 0; 
+  }
+  return product?.precioDescuento ?? 0;
+};
 
   return (
     <>
       {showPrice && (
         <div>
           <PriceTag
-            regularPrice={getRegularPrice()}
-            discountedPrice={getDiscountedPrice()}
+            precio={getRegularPrice()}
+            precioDescuento={getDiscountedPrice()}
           />
         </div>
       )}
@@ -86,7 +88,7 @@ const AddToCartBtn = ({
             <FaMinus />
           </button>
           <p className="text-base font-semibold w-10 text-center">
-            {existingProduct?.quantity}
+            {existingProduct?.cantidad}
           </p>
           <button
             onClick={handleAddToCart}

@@ -21,7 +21,7 @@ const UserInfo = ({ currentUser }: UserTypes) => {
           />
           <div className="text-start flex-1">
             <h2 className="text-xl font-bold tracking-tight sm:text-4xl">
-              Welcome back, dear{" "}
+              Bienvenido{" "}
               <span className="underline underline-offset-2 decoration-[1px] font-medium">
                 {currentUser?.firstName} {currentUser?.lastName}
               </span>
@@ -43,7 +43,7 @@ const UserInfo = ({ currentUser }: UserTypes) => {
             }
             className="rounded-md bg-white px-8 py-2.5 text-sm font-semibold  text-gray-900 hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
           >
-            Edit profile
+            Editar perfil
           </button>
           <button
             onClick={() =>
@@ -51,13 +51,13 @@ const UserInfo = ({ currentUser }: UserTypes) => {
             }
             className="rounded-md bg-white px-8 py-2.5 text-sm font-semibold  text-gray-900 hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
           >
-            Add Address
+            Agregar direccion
           </button>
           <button
             onClick={() => auth.signOut()}
             className="rounded-md bg-white px-8 py-2.5 text-sm font-semibold  text-gray-900 hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
           >
-            Logout
+            Cerrar sesión
           </button>
         </div>
         <svg

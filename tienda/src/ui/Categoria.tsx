@@ -11,7 +11,7 @@ const Categorias = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      const endpoint = `${config?.baseUrl}/categorias`; // URL del endpoint para obtener categorías
+      const endpoint = `${config?.baseUrl}${config?.apiPrefix}/categories`; // URL del endpoint para obtener categorías
       try {
         const data = await getData(endpoint); // Llama a la función `getData` para obtener los datos
         setCategories(data); // Actualiza el estado con las categorías obtenidas
@@ -29,7 +29,7 @@ const Categorias = () => {
         <div className="flex items-center justify-between">
           <Title text="Categorías Populares" /> {/* Título principal */}
           <Link
-            to={"/categorias/tvAndAudio"}
+            to={"/categorias/"}
             className="font-medium relative group overflow-hidden"
           >
             Ver todas las categorías{" "}
@@ -43,17 +43,17 @@ const Categorias = () => {
       <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-7">
         {categories.map((item: CategoryProps) => (
           <Link
-            to={`/categorias/${item?._base}`} // Enlace dinámico basado en la propiedad `_base`
-            key={item?._id}
+            to={`/categorias/${item?.slug}`} // Enlace dinámico basado en la propiedad `_base`
+            key={item?.id}
             className="w-full h-auto relative group overflow-hidden"
           >
             <img
-              src={item?.image} // Imagen de la categoría
-              alt={`Imagen de la categoría ${item?.name}`}
+              src={item?.imagen} // Imagen de la categoría
+              alt={`Imagen de la categoría ${item?.nombre}`}
               className="w-full h-auto rounded-md group-hover:scale-110 duration-300"
             />
             <div className="absolute bottom-3 w-full text-center">
-              <p className="text-sm md:text-base font-bold">{item?.name}</p> {/* Nombre de la categoría */}
+              <p className="text-sm md:text-base font-bold">{item?.nombre}</p> {/* Nombre de la categoría */}
             </div>
           </Link>
         ))}

@@ -2,36 +2,38 @@ import { doc, getDoc } from "firebase/firestore";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { db } from "./firebase";
-import { ProductProps } from "../../type";
+import { Product } from "../../type";
 
-interface CartProduct extends ProductProps {
-  quantity: number;
+// Actualizamos CartProduct para usar la nueva interfaz Product
+interface CartProduct extends Product {
+  cantidad: number;
 }
 
+// Actualizamos UserType para que coincida con UserTypes de tu interfaz
 interface UserType {
   firstName: string;
   lastName: string;
-  password: string;
   email: string;
-  avatar: string;
   id: string;
 }
 
 interface StoreType {
-  // user
+  // User
   currentUser: UserType | null;
   isLoading: boolean;
-  getUserInfo: (uid: any) => Promise<void>;
-  // cart
+  getUserInfo: (uid: string) => Promise<void>;
+  
+  // Cart
   cartProduct: CartProduct[];
-  addToCart: (product: ProductProps) => Promise<void>;
-  decreaseQuantity: (productId: number) => void;
-  removeFromCart: (productId: number) => void;
+  addToCart: (product: Product) => Promise<void>;
+  decreaseQuantity: (productId: string) => void;
+  removeFromCart: (productId: string) => void;
   resetCart: () => void;
-  // // favorite
+  
+  // Favorite
   favoriteProduct: CartProduct[];
-  addToFavorite: (product: ProductProps) => Promise<void>;
-  removeFromFavorite: (productId: number) => void;
+  addToFavorite: (product: Product) => Promise<void>;
+  removeFromFavorite: (productId: string) => void;
   resetFavorite: () => void;
 }
 
@@ -47,6 +49,7 @@ const customStorage = {
     localStorage.removeItem(name);
   },
 };
+
 export const store = create<StoreType>()(
   persist(
     (set) => ({
@@ -55,7 +58,7 @@ export const store = create<StoreType>()(
       cartProduct: [],
       favoriteProduct: [],
 
-      getUserInfo: async (uid: any) => {
+      getUserInfo: async (uid: string) => {
         if (!uid) return set({ currentUser: null, isLoading: false });
 
         const docRef = doc(db, "users", uid);
@@ -70,26 +73,27 @@ export const store = create<StoreType>()(
           set({ currentUser: null, isLoading: false });
         }
       },
-      addToCart: (product: ProductProps) => {
+
+      addToCart: (product: Product) => {
         return new Promise<void>((resolve) => {
           set((state: StoreType) => {
-            const existingProduct = state.cartProduct.find(
-              (p) => p._id === product._id
-            );
-
+            const existingProduct = state.cartProduct.find((p) => p.id === product.id);
+      
             if (existingProduct) {
+              // Si ya existe, solo aumenta la cantidad
               return {
                 cartProduct: state.cartProduct.map((p) =>
-                  p._id === product._id
-                    ? { ...p, quantity: (p.quantity || 0) + 1 }
+                  p.id === product.id
+                    ? { ...p, cantidad: (p.cantidad || 0) + 1 }
                     : p
                 ),
               };
             } else {
+              // Si no existe, lo agregamos con cantidad 1
               return {
                 cartProduct: [
                   ...state.cartProduct,
-                  { ...product, quantity: 1 },
+                  { ...product, cantidad: 1 },
                 ],
               };
             }
@@ -97,17 +101,18 @@ export const store = create<StoreType>()(
           resolve();
         });
       },
-      decreaseQuantity: (productId: number) => {
+
+      decreaseQuantity: (productId: string) => {
         set((state: StoreType) => {
           const existingProduct = state.cartProduct.find(
-            (p) => p._id === productId
+            (p) => p.id === productId
           );
-
+      
           if (existingProduct) {
             return {
               cartProduct: state.cartProduct.map((p) =>
-                p._id === productId
-                  ? { ...p, quantity: Math.max(p.quantity - 1, 1) }
+                p.id === productId
+                  ? { ...p, cantidad: Math.max(p.cantidad - 1, 1) } // Cambiar quantity por cantidad
                   : p
               ),
             };
@@ -116,41 +121,45 @@ export const store = create<StoreType>()(
           }
         });
       },
-      removeFromCart: (productId: number) => {
+
+      removeFromCart: (productId: string) => {
         set((state: StoreType) => ({
           cartProduct: state.cartProduct.filter(
-            (item) => item._id !== productId
+            (item) => item.id !== productId
           ),
         }));
       },
+
       resetCart: () => {
         set({ cartProduct: [] });
       },
-      addToFavorite: (product: ProductProps) => {
+
+      addToFavorite: (product: Product) => {
         return new Promise<void>((resolve) => {
           set((state: StoreType) => {
             const isFavorite = state.favoriteProduct.some(
-              (item) => item._id === product._id
+              (item) => item.id === product.id
             );
             return {
               favoriteProduct: isFavorite
                 ? state.favoriteProduct.filter(
-                    (item) => item._id !== product._id
+                    (item) => item.id !== product.id
                   )
-                : [...state.favoriteProduct, { ...product }],
+                : [...state.favoriteProduct, { ...product, quantity: 1 }],
             };
           });
           resolve();
         });
       },
 
-      removeFromFavorite: (productId: number) => {
+      removeFromFavorite: (productId: string) => {
         set((state: StoreType) => ({
           favoriteProduct: state.favoriteProduct.filter(
-            (item) => item._id !== productId
+            (item) => item.id !== productId
           ),
         }));
       },
+
       resetFavorite: () => {
         set({ favoriteProduct: [] });
       },

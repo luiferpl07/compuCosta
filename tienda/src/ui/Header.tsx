@@ -8,7 +8,7 @@ import { Link } from 'react-router-dom';
 import { config } from "../../config";
 import { getData } from "../lib";
 import { Menu, MenuButton, MenuItem,MenuItems, Transition,} from '@headlessui/react';
-import { CategoryProps, ProductProps } from "../../type";
+import { CategoryProps, Product } from "../../type";
 import ProductCard from "./ProductCard";
 import { store } from "../lib/store";
 
@@ -28,7 +28,7 @@ const Header = () => {
 
     useEffect(() => {
       const fetchData = async () => {
-        const endpoint = `${config?.baseUrl}/categorias`;
+        const endpoint = `${config?.baseUrl}${config?.apiPrefix}/categories`;
         try {
           const data = await getData(endpoint);
           setCategories(data);
@@ -40,8 +40,8 @@ const Header = () => {
     }, []);
 
     useEffect(() => {
-      const filtered = products.filter((item: ProductProps) =>
-        item.name.toLowerCase().includes(searchText.toLowerCase())
+      const filtered = products.filter((item: Product) =>
+        item.nombre.toLowerCase().includes(searchText.toLowerCase())
       );
       setFilteredProducts(filtered);
     }, [searchText]);
@@ -78,9 +78,9 @@ const Header = () => {
           <div className="absolute left-0 top-20 w-full mx-auto max-h-[500px] px-10 py-5 bg-white z-20 overflow-y-scroll text-black shadow-lg shadow-skyText scrollbar-hide">
             {filteredProducts.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-5">
-                {filteredProducts?.map((item: ProductProps) => (
+                {filteredProducts?.map((item: Product) => (
                   <ProductCard
-                    key={item?._id}
+                    key={item?.id}
                     item={item}
                     setSearchText={setSearchText}
                   />
@@ -100,7 +100,7 @@ const Header = () => {
          {/* Menubar */}
         
         <div className="flex items-center gap-x-6 text-2xl">
-          <Link to={"/perfil"}>
+          <Link to={"/perfil"}> 
           {currentUser ? (
               <img
                 src={currentUser?.avatar}
@@ -108,9 +108,9 @@ const Header = () => {
                 className="w-10 h-10 rounded-full object-cover"
               />
             ) : (
-            <FiUser className="hover:text-textoRojo duration-200 cursor-pointer" />
+              <FiUser className="hover:text-skyText duration-200 cursor-pointer" />
             )}
-            </Link>
+          </Link>
           
             <Link to={"/favorito"} className='relative block'>
             <FiStar className="hover:text-textoRojo duration-200 cursor-pointer" />
@@ -150,17 +150,17 @@ const Header = () => {
                 className="w-52 origin-top-right rounded-xl border border-white bg-red-600 p-1 text-sm/6 text-gray-200 [--anchor-gap:var(--spacing-1)] focus:outline-none hover:text-white z-50"
               >
                 {categories.map((item: CategoryProps) => (
-                  <MenuItem key={item?._id}>
+                  <MenuItem key={item?.id}>
                     <Link
-                      to={`/categorias/${item?._base}`}
+                      to={`/categorias/${item?.slug}`}
                       className="flex w-full items-center gap-2 rounded-lg py-2 px-3 data-[focus]:bg-white/20 tracking-wide"
                     >
                       <img
-                        src={item?.image}
+                        src={item?.imagen}
                         alt="categoryImage"
                         className="w-6 h-6 rounded-md"
                       />
-                      {item?.name}
+                      {item?.nombre}
                     </Link>
                   </MenuItem>
                 ))}

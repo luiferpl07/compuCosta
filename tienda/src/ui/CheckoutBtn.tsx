@@ -1,8 +1,8 @@
-import { ProductProps } from "../../type";
+import { Product } from "../../type";
 import { store } from "../lib/store";
 import { config } from "../../config";
 
-const CheckoutBtn = ({ products }: { products: ProductProps[] }) => {
+const CheckoutBtn = ({ products }: { products: Product[] }) => {
   const { currentUser } = store();
   const publicKey = "tu_llave_publica_wompi";
 
@@ -10,7 +10,7 @@ const CheckoutBtn = ({ products }: { products: ProductProps[] }) => {
     try {
       // Calcular el monto total
       const totalAmountInCents = products.reduce(
-        (total, product) => total + product.quantity * product.discountedPrice * 100,
+        (total, product) => total + product.cantidad * product.precioDescuento * 100,
         0
       );
 
