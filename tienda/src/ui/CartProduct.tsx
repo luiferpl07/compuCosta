@@ -5,36 +5,32 @@ import AddToCartBtn from "./AddToCartBtn";
 import { IoClose } from "react-icons/io5";
 import { store } from "../lib/store";
 import toast from "react-hot-toast";
-import { FaCheck, FaStar } from "react-icons/fa";
-import { config } from "../../config"; 
+import { FaCheck } from "react-icons/fa";
+import { MdStar, MdStarHalf, MdOutlineStarOutline } from "react-icons/md"; // Importa los iconos correctos
+import { getProductImage, getProductImageAlt } from "../../utils/imageUtils";
+import PriceTag from "./PriceTag";
 
 
 const CartProduct = ({ product }: { product: Product }) => {
   const { removeFromCart } = store();
 
   const handleRemoveProduct = () => {
-    if (product?.id) {
-      removeFromCart(product.id);
-      toast.success(`${product.nombre.substring(0, 20)} eliminado exitosamente!`);
+    if (product?.idproducto) {
+      removeFromCart(product.idproducto);
+      toast.success(`${product.nombreproducto.substring(0, 20)} eliminado exitosamente!`);
     }
   };
 
-  // Calcular puntuación promedio
   const averageRating = product?.reviews?.length
-    ? product.reviews.reduce((acc, rev) => acc + rev.calificacion, 0) / product.reviews.length
-    : 0;
+    ? (product.reviews.reduce((acc, rev) => acc + rev.calificacion, 0) / product.reviews.length).toFixed(1)
+    : "0.0";
 
-  const mainImage = product?.imagenes?.find(img => img.es_principal)?.url  
-    ? `${config?.baseUrl}${product.imagenes.find(img => img.es_principal)?.url}`
-    : product?.imagenes?.[0]?.url  
-      ? `${config?.baseUrl}${product.imagenes[0].url}`
-      : 'ruta-a-imagen-por-defecto';
-
-  const fallbackImageAlt = product?.imagenes[0]?.alt_text || `Imagen del producto ${product?.nombre}`;
+  const mainImage = getProductImage(product?.imagenes);
+  const fallbackImageAlt = getProductImageAlt(product?.imagenes, product?.nombreproducto);
 
   return (
     <div className="flex py-6 sm:py-10">
-      <Link to={`/productos/${product.id}`}>
+      <Link to={`/productos/${product.idproducto}`}>
         <img
           src={mainImage}
           alt={fallbackImageAlt}
@@ -46,28 +42,42 @@ const CartProduct = ({ product }: { product: Product }) => {
         <div className="relative pr-9 sm:grid sm:grid-cols-4 sm:gap-x-6 sm:pr-0">
           <div className="flex flex-col gap-1 col-span-3">
             <h3 className="text-base font-semibold w-full">
-              {product.nombre}
+              {product.nombreproducto}
             </h3>
             <div className="flex items-center gap-2">
-              {[...Array(5)].map((_, idx) => (
-                <FaStar
-                  key={idx}
-                  className={`${idx < averageRating ? "text-yellow-400" : "text-gray-300"}`}
-                />
-              ))}
+              <span className="text-sm font-semibold text-gray-700">{averageRating}</span>
+              <div className="flex items-center">
+                {[...Array(5)].map((_, index) => {
+                  const ratingValue = index + 1;
+                  const isHalfStar = parseFloat(averageRating) - index > 0 && parseFloat(averageRating) - index < 1;
+                  const isFullStar = parseFloat(averageRating) >= ratingValue;
+                  
+                  return isFullStar ? (
+                    <MdStar key={index} className="text-yellow-400" />
+                  ) : isHalfStar ? (
+                    <MdStarHalf key={index} className="text-yellow-400" />
+                  ) : (
+                    <MdOutlineStarOutline key={index} className="text-gray-300" />
+                  );
+                })}
+              </div>
               <span className="text-sm text-gray-600">
                 ({product.reviews?.length || 0} reseñas)
               </span>
             </div>
-            <p className="text-xs">
-              Marca: <span className="font-medium">{product?.marca?.nombre || "Sin marca"}</span>
-            </p>
-            <p className="text-xs">
-              Categoría: <span className="font-medium">{product?.categorias[0]?.nombre || "Sin categoría"}</span>
-            </p>
+            <p>Marca: <span className="font-medium">
+              {typeof product?.marca === "string" && product.marca !== null
+                ? product.marca
+                : "Sin marca"}
+            </span></p>
+            <p>Categoría: <span className="font-medium">
+              {typeof product?.categorias === "string" && product.categorias !== null
+                ? product.categorias
+                : "Sin categoría"}
+            </span></p>
             <div className="flex items-center gap-6 mt-2">
               <p className="text-base font-semibold">
-                <FormatoPrecio amount={product.precio * product.cantidad} />
+                <PriceTag precio={product.lista2} precioDescuento={product.lista1} className="text-lg" />
               </p>
               <AddToCartBtn product={product} showPrice={false} />
             </div>
@@ -89,9 +99,9 @@ const CartProduct = ({ product }: { product: Product }) => {
               <span>En Stock</span>
             </p>
           )}
-          {product?.precioDescuento && (
+          {product?.lista2 && (
             <p className="text-sm text-green-600">
-              Ahorras <FormatoPrecio amount={product.precio - product.precioDescuento} />
+              Ahorras <FormatoPrecio amount={product.lista2 - product.lista1} />
             </p>
           )}
         </div>

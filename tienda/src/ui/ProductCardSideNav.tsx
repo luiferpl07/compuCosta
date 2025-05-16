@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { Dialog, DialogPanel, DialogTitle, Transition } from "@headlessui/react";
 import FormatoPrecio from "./FormatoPrecio";
-import { config } from "../../config"; 
+import { getProductImage } from "../../utils/imageUtils";
 
 const ProductCardSideNav = ({ product }: { product?: Product }) => {
   const { addToFavorite, favoriteProduct } = store();
@@ -15,7 +15,7 @@ const ProductCardSideNav = ({ product }: { product?: Product }) => {
 
   useEffect(() => {
     const availableItem = favoriteProduct.find(
-      (item) => item?.id === product?.id
+      (item) => item?.idproducto === product?.idproducto
     );
     setExistingProduct(availableItem || null);
   }, [product, favoriteProduct]);
@@ -25,8 +25,8 @@ const ProductCardSideNav = ({ product }: { product?: Product }) => {
       addToFavorite(product).then(() => {
         toast.success(
           existingProduct
-            ? `${product?.nombre.substring(0, 10)} eliminado exitosamente!`
-            : `${product?.nombre.substring(0, 10)} agregado exitosamente!`
+            ? `${product?.nombreproducto.substring(0, 10)} eliminado exitosamente!`
+            : `${product?.nombreproducto.substring(0, 10)} agregado exitosamente!`
         );
       });
     }
@@ -35,19 +35,12 @@ const ProductCardSideNav = ({ product }: { product?: Product }) => {
   const open = () => setIsOpen(true);
   const close = () => setIsOpen(false);
 
-  // Calcular la puntuación promedio de las reseñas
   const averageRating = product?.reviews?.length
     ? product.reviews.reduce((acc, rev) => acc + rev.calificacion, 0) / product.reviews.length
     : 0;
 
-
-  const mainImage = product?.imagenes?.find(img => img.es_principal)?.url  
-  ? `${config?.baseUrl}${product.imagenes.find(img => img.es_principal)?.url}`
-  : product?.imagenes?.[0]?.url  
-    ? `${config?.baseUrl}${product.imagenes[0].url}`
-    : 'ruta-a-imagen-por-defecto';
-    
-  const fallbackImageAlt = product?.imagenes[0]?.alt_text || `Imagen del producto ${product?.nombre}`;
+  const mainImage = getProductImage(product?.imagenes);
+  const fallbackImageAlt = product?.imagenes[0]?.alt_text || `Imagen del producto ${product?.nombreproducto}`;
 
   return (
     <div className="absolute right-1 top-1 flex flex-col gap-1 transition translate-x-12 group-hover:translate-x-0 duration-300">
@@ -65,14 +58,13 @@ const ProductCardSideNav = ({ product }: { product?: Product }) => {
         <LuArrowLeftRight />
       </span>
       <span
-        onClick={open} // Activar el modal de vista rápida
+        onClick={open}
         className="w-11 h-11 inline-flex text-textoRojo text-lg items-center justify-center rounded-full hover:text-white hover:bg-textoAmarillo duration-200"
         title="Vista rápida"
       >
         <FaRegEye />
       </span>
 
-      {/* Modal de Vista Rápida */}
       <Transition appear show={isOpen}>
         <Dialog
           as="div"
@@ -86,16 +78,18 @@ const ProductCardSideNav = ({ product }: { product?: Product }) => {
                   Vista rápida
                 </DialogTitle>
                 <div className="mt-4">
-                  {/* Aquí renderizamos los detalles del producto */}
                   {product && (
                     <div className="flex flex-col gap-4">
-                      <img
-                        src={mainImage}
-                        alt={fallbackImageAlt}
-                        className="h-48 w-full rounded-md object-cover object-center"
-                      />
+                      <div className="h-48 w-full overflow-hidden rounded-md">
+                        <img
+                          src={mainImage}
+                          alt={fallbackImageAlt}
+                          className="w-full h-full object-contain"
+                          loading="lazy"
+                        />
+                      </div>
                       <div>
-                        <h3 className="text-lg font-semibold">{product?.nombre}</h3>
+                        <h3 className="text-lg font-semibold">{product?.nombreproducto}</h3>
                         <div className="flex items-center gap-2">
                           {[...Array(5)].map((_, idx) => (
                             <FaStar
@@ -107,15 +101,27 @@ const ProductCardSideNav = ({ product }: { product?: Product }) => {
                             ({product.reviews?.length || 0} reseñas)
                           </span>
                         </div>
+
                         <p className="text-sm mt-2">
-                          Marca: <span className="font-medium">{product?.marca?.nombre || "Sin marca"}</span>
+                          Marca:{" "}
+                          <span className="font-medium">
+                            {typeof product?.marca === "string" && product.marca !== null
+                              ? product.marca
+                              : "Sin marca"}
+                          </span>
                         </p>
+
                         <p className="text-sm mt-1">
-                          Categoría: <span className="font-medium">{product?.categorias[0]?.nombre || "Sin categoría"}</span>
+                          Categoría:{" "}
+                          <span className="font-medium">
+                            {typeof product?.categorias === "string" && product.categorias !== null
+                              ? product.categorias
+                              : "Sin categoría"}
+                          </span>
                         </p>
                         <div className="flex mt-4">
                           <p className="text-lg font-semibold">
-                            <FormatoPrecio amount={product.precio} />
+                            <FormatoPrecio amount={product.lista1} />
                           </p>
                         </div>
                         <div className="mt-4">
@@ -125,9 +131,9 @@ const ProductCardSideNav = ({ product }: { product?: Product }) => {
                             <p className="text-sm text-red-500">Agotado</p>
                           )}
                         </div>
-                        {product?.precioDescuento && (
+                        {product?.lista2 && (
                           <p className="text-sm text-green-600 mt-2">
-                            Ahorras <FormatoPrecio amount={product.precio - product.precioDescuento} />
+                            Ahorras <FormatoPrecio amount={product.lista2 - product.lista1} />
                           </p>
                         )}
                       </div>

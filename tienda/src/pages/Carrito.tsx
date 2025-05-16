@@ -7,24 +7,36 @@ import CheckoutBtn from "../ui/CheckoutBtn";
 import Container from "../ui/Container";
 import FormatoPrecio from "../ui/FormatoPrecio";
 
+interface TotalAmount {
+  regular: number;
+  discounted: number;
+}
+
 const Carrito = () => {
-  const [totalAmt, setTotalAmt] = useState({ regular: 0, discounted: 0 });
+  const [totalAmt, setTotalAmt] = useState<TotalAmount>({ 
+    regular: 0, 
+    discounted: 0
+  });
   const { cartProduct, currentUser } = store();
 
   const shippingAmt = 25;
-  const taxAmt = 15;
 
   useEffect(() => {
-    const totals = cartProduct.reduce(
+    const totals = cartProduct.reduce<TotalAmount>(
       (sum, product) => {
-        sum.regular += product?.precio * product?.cantidad;
-        sum.discounted += product?.precioDescuento * product?.cantidad;
+        const regularSubtotal = product?.lista2 * product?.cantidad;
+        const discountedSubtotal = product?.lista1 * product?.cantidad;
+
+        sum.regular += regularSubtotal;
+        sum.discounted += discountedSubtotal;
+        
         return sum;
       },
       { regular: 0, discounted: 0 }
     );
     setTotalAmt(totals);
   }, [cartProduct]);
+
   return (
     <Container>
       {cartProduct.length > 0 ? (
@@ -35,49 +47,24 @@ const Carrito = () => {
 
           <div className="mt-10 lg:grid lg:grid-cols-12 lg:items-start lg:gap-x-12 xl:gap-x-16">
             <section className="lg:col-span-7">
-              <div className=" divide-y divide-gray-200 border-b border-t border-gray-200">
+              <div className="divide-y divide-gray-200 border-b border-t border-gray-200">
                 {cartProduct.map((product) => (
-                  <CartProduct product={product} key={product?.id} />
+                  <CartProduct product={product} key={product?.idproducto} />
                 ))}
               </div>
             </section>
             <section className="mt-16 rounded-lg bg-gray-50 px-4 py-6 sm:p-6 lg:col-span-5 lg:mt-0 lg:p-8">
-              <h2 className="text-lg font-medium text-gray-900">
+              <h2 className="text-lg font-medium text-red-600">
                 Resumen del pedido
               </h2>
               <dl className="mt-6 space-y-4">
                 <div className="flex items-center justify-between">
-                  <dt className="text-sm text-gray-600">Subtotal</dt>
+                  <dt className="text-base font-medium text-gray-900">Subtotal</dt>
                   <dd className="text-sm font-medium text-gray-900">
                     <FormatoPrecio amount={totalAmt?.regular} />
                   </dd>
                 </div>
-                <div className="flex items-center justify-between border-t border-gray-200 pt-4">
-                  <dt className="flex items-center text-sm text-gray-600">
-                    <span>Estimado de compra</span>
-
-                    <FaQuestionCircle
-                      className="h-5 w-5 text-gray-400 ml-2"
-                      aria-hidden="true"
-                    />
-                  </dt>
-                  <dd className="text-sm font-medium text-gray-900">
-                    <FormatoPrecio amount={shippingAmt} />
-                  </dd>
-                </div>
-                <div className="flex items-center justify-between border-t border-gray-200 pt-4">
-                  <dt className="flex text-sm text-gray-600">
-                    <span>iva</span>
-
-                    <FaQuestionCircle
-                      className="h-5 w-5 text-gray-400 ml-2"
-                      aria-hidden="true"
-                    />
-                  </dt>
-                  <dd className="text-sm font-medium text-gray-900">
-                    <FormatoPrecio amount={taxAmt} />
-                  </dd>
-                </div>
+               
                 <div className="flex items-center justify-between border-t border-gray-200 pt-4">
                   <dt className="text-base font-medium text-gray-900">
                     Descuento Total
@@ -90,11 +77,11 @@ const Carrito = () => {
                 </div>
                 <div className="flex items-center justify-between border-t border-gray-200 pt-4">
                   <dt className="text-base font-medium text-gray-900">
-                    Total de pedidos  
+                    Total de pedidos
                   </dt>
                   <dd className="text-lg font-bold text-gray-900">
                     <FormatoPrecio
-                      amount={totalAmt?.discounted + shippingAmt + taxAmt}
+                      amount={totalAmt?.discounted + shippingAmt}
                     />
                   </dd>
                 </div>
@@ -109,7 +96,7 @@ const Carrito = () => {
             Carrito de compras
           </h1>
           <p className="text-lg max-w-[600px] text-center text-gray-600 tracking-wide leading-6">
-          Actualmente no tienes productos en tu carrito. Agrega productos para comenzar a comprar.
+            Actualmente no tienes productos en tu carrito. Agrega productos para comenzar a comprar.
           </p>
           <Link
             to={"/productos"}
@@ -123,5 +110,4 @@ const Carrito = () => {
   );
 };
 
-
-export default Carrito
+export default Carrito;

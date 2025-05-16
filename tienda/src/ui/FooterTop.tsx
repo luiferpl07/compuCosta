@@ -1,6 +1,6 @@
-import React from "react";
+
 import { Link } from "react-router-dom"; // Importa Link desde react-router-dom
-import { FcShipped, FcSupport } from "react-icons/fc";
+import { FcContacts, FcShipped } from "react-icons/fc";
 import { SiHomeassistantcommunitystore } from "react-icons/si";
 
 import Container from "./Container";
@@ -20,10 +20,10 @@ const FooterTop = () => {
       link: "/tiendas", // Ruta a la que redirige
     },
     {
-      name: "Soporte técnico",
-      icon: <FcSupport className="mx-auto h-12 w-12 text-textoAmarillo" />,
-      description: "Servicio y Atención Especializada.",
-      link: "/soporte", // Ruta a la que redirige
+      name: "Servicios",
+      icon: <FcContacts className="mx-auto h-12 w-12 text-textoAmarillo" />,
+      description: "Nuestros Servicios .",
+      link: "/Servicio", // Ruta a la que redirige
     },
   ];
 

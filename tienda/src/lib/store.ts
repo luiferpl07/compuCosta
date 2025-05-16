@@ -14,6 +14,7 @@ interface UserType {
   firstName: string;
   lastName: string;
   email: string;
+  avatar: string;
   id: string;
 }
 
@@ -77,13 +78,13 @@ export const store = create<StoreType>()(
       addToCart: (product: Product) => {
         return new Promise<void>((resolve) => {
           set((state: StoreType) => {
-            const existingProduct = state.cartProduct.find((p) => p.id === product.id);
+            const existingProduct = state.cartProduct.find((p) => p.idproducto === product.idproducto);
       
             if (existingProduct) {
               // Si ya existe, solo aumenta la cantidad
               return {
                 cartProduct: state.cartProduct.map((p) =>
-                  p.id === product.id
+                  p.idproducto === product.idproducto
                     ? { ...p, cantidad: (p.cantidad || 0) + 1 }
                     : p
                 ),
@@ -105,13 +106,13 @@ export const store = create<StoreType>()(
       decreaseQuantity: (productId: string) => {
         set((state: StoreType) => {
           const existingProduct = state.cartProduct.find(
-            (p) => p.id === productId
+            (p) => p.idproducto === productId
           );
       
           if (existingProduct) {
             return {
               cartProduct: state.cartProduct.map((p) =>
-                p.id === productId
+                p.idproducto === productId
                   ? { ...p, cantidad: Math.max(p.cantidad - 1, 1) } // Cambiar quantity por cantidad
                   : p
               ),
@@ -125,7 +126,7 @@ export const store = create<StoreType>()(
       removeFromCart: (productId: string) => {
         set((state: StoreType) => ({
           cartProduct: state.cartProduct.filter(
-            (item) => item.id !== productId
+            (item) => item.idproducto !== productId
           ),
         }));
       },
@@ -138,12 +139,12 @@ export const store = create<StoreType>()(
         return new Promise<void>((resolve) => {
           set((state: StoreType) => {
             const isFavorite = state.favoriteProduct.some(
-              (item) => item.id === product.id
+              (item) => item.idproducto === product.idproducto
             );
             return {
               favoriteProduct: isFavorite
                 ? state.favoriteProduct.filter(
-                    (item) => item.id !== product.id
+                    (item) => item.idproducto !== product.idproducto
                   )
                 : [...state.favoriteProduct, { ...product, quantity: 1 }],
             };
@@ -155,7 +156,7 @@ export const store = create<StoreType>()(
       removeFromFavorite: (productId: string) => {
         set((state: StoreType) => ({
           favoriteProduct: state.favoriteProduct.filter(
-            (item) => item.id !== productId
+            (item) => item.idproducto !== productId
           ),
         }));
       },

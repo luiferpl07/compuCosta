@@ -9,7 +9,7 @@ const checkConfig = (server: "production" | "local"): Config | undefined => {
   switch (server) {
     case "production":
       config = {
-        baseUrl: "http://127.0.0.1:3000",
+        baseUrl: "https://mlfd3wml-3000.use2.devtunnels.ms",
         apiPrefix: "/api"
       };
       break;
@@ -26,5 +26,8 @@ const checkConfig = (server: "production" | "local"): Config | undefined => {
   return config;
 };
 
-export const selectServer: "production" | "local" = "local";
-export const config = checkConfig(selectServer);
+export const selectServer: "production" | "local" = "production";
+export const config: Config = checkConfig(selectServer) ?? {
+  baseUrl: "https://mlfd3wml-3000.use2.devtunnels.ms",
+  apiPrefix: "/api",
+};

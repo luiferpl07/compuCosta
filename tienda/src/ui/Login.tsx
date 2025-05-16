@@ -1,159 +1,150 @@
-import { useState } from "react";
-import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
-import { auth, googleProvider } from "../lib/firebase";
-import { FcGoogle } from "react-icons/fc";
-import Label from "./Label";
+import React, { useState } from 'react';
+import { FcGoogle } from 'react-icons/fc';
+import { useAuth } from '../context/AuthContext';
+import { logo } from "../assets";
 
-const Login = ({ setLogin }) => {
-  const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [errMsg, setErrMsg] = useState("");
+interface LoginProps {
+  onToggleAuth: () => void;
+}
+
+const Login: React.FC<LoginProps> = ({ onToggleAuth }) => {
+  const { login, loginWithGoogle, error, loading, clearError } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    rememberMe: false
+  });
 
-  const handleLogin = async (e) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!email || !password) {
-      setErrMsg("Por favor ingresa todos los campos.");
-      return;
-    }
-
+    clearError(); // Clear any previous errors
+    
     try {
-      setLoading(true);
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      // Login successful, no need to manually set login state
-      console.log("User logged in:", userCredential.user);
-    } catch (error) {
-      console.error(error);
-      const errorCode = error.code;
-      let errorMessage;
-
-      switch (errorCode) {
-        case "auth/invalid-email":
-          errorMessage = "Por favor, ingresa un correo válido.";
-          break;
-        case "auth/wrong-password":
-          errorMessage = "La contraseña es incorrecta. Intenta de nuevo.";
-          break;
-        case "auth/user-not-found":
-          errorMessage = "No se encuentra una cuenta con ese correo. Regístrate primero.";
-          break;
-        default:
-          errorMessage = "Ocurrió un error al iniciar sesión. Intenta de nuevo.";
-      }
-
-      setErrMsg(errorMessage);
-    } finally {
-      setLoading(false);
+      // Call the login function from your auth context
+      await login({
+        email: formData.email,
+        password: formData.password
+      });
+      // If successful, redirect will be handled by your auth state observer
+    } catch (err) {
+      console.error("Error al iniciar sesión:", err);
     }
   };
 
   const handleGoogleLogin = async () => {
     try {
-      setLoading(true);
-      await signInWithPopup(auth, googleProvider);
-      // Login successful, onAuthStateChanged in Perfil will handle routing
-    } catch (error) {
-      console.error(error);
-      setErrMsg("Error al iniciar sesión con Google. Intenta nuevamente.");
-    } finally {
-      setLoading(false);
+      await loginWithGoogle();
+      // Redirect will be handled by your auth state observer
+    } catch (err) {
+      console.error("Error al iniciar sesión con Google:", err);
     }
   };
 
   return (
-    <div>
-      <div className="bg-gray-950 rounded-lg">
-        <form
-          onSubmit={handleLogin}
-          className="max-w-5xl mx-auto pt-10 px-4 lg:px-0 text-white"
-        >
-          <div className="flex flex-col items-center border-b border-b-white/10 pb-5">
-            <h2 className="text-lg font-semibold uppercase leading-7">
-              Iniciar Sesión
-            </h2>
-            <p className="mt-1 text-sm leading-6 text-gray-400">
-              Ingresa tus datos para acceder a tu cuenta.
-            </p>
-          </div>
-
-          <div className="border-b mx-auto border-b-white/10 pb-5 max-w-lg">
-            <div className="mt-5 grid grid-cols-1 gap-x-6 gap-y-5">
-              <div className="sm:col-span-6">
-                <Label title="Correo Electrónico" htmlFor="email" />
-                <input
-                  type="email"
-                  name="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full rounded-md bg-white/5 py-2 px-4 outline-none text-white shadow-sm ring-1 ring-inset ring-white/10 focus:ring-skyText sm:text-sm mt-2"
-                />
-              </div>
-              <div className="sm:col-span-6">
-                <Label title="Contraseña" htmlFor="password" />
-                <div className="relative">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    name="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full rounded-md bg-white/5 py-2 px-4 outline-none text-white shadow-sm ring-1 ring-inset ring-white/10 focus:ring-skyText sm:text-sm mt-2"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-3 flex items-center text-gray-400"
-                  >
-                    {showPassword ? "Ocultar" : "Mostrar"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {errMsg && (
-            <p className="bg-white/90 text-red-600 text-center py-2 rounded-md tracking-wide font-semibold">
-              {errMsg}
-            </p>
-          )}
-
-          <button
-            disabled={loading}
-            type="submit"
-            className="mt-5 bg-indigo-700 w-full max-w-xs mx-auto py-2 px-6 uppercase text-base font-bold tracking-wide text-gray-300 rounded-md hover:text-white hover:bg-indigo-600 duration-200 flex items-center justify-center"
-          >
-            {loading ? "Cargando..." : "Iniciar Sesión"}
-          </button>
-        </form>
-
-        <div className="text-center mt-4">
-          <p className="text-gray-400 mb-2">O</p>
-          <button
-            onClick={handleGoogleLogin}
-            className="bg-white w-full max-w-xs mx-auto py-2 px-6 uppercase text-base font-bold tracking-wide text-textoRojo rounded-md hover:text-white hover:bg-textoRojo duration-200 flex items-center justify-center"
-          >
-            {loading ? (
-              "Cargando..."
-            ) : (
-              <>
-                <FcGoogle className="text-xl mr-2" />
-                Iniciar sesión con Google
-              </>
-            )}
-          </button>
-        </div>
-
-        <div className="text-center mt-4">
-          <p className="text-gray-400 mb-2">¿No tienes cuenta?</p>
-          <button
-            onClick={() => setLogin(false)}
-            className="text-sky-500 hover:text-sky-400 font-semibold"
-          >
-            Regístrate aquí
-          </button>
-        </div>
+    <div className="w-full p-12 bg-red-600 rounded-lg shadow-xl">
+      <div className="flex items-center mb-8">
+        <img src={logo} alt="COMPUCOSTA" className="h-12 text-white" />
       </div>
+
+      <h2 className="text-3xl font-bold mb-6 text-white">
+        Inicia Sesión
+      </h2>
+      
+      <div className="mb-6">
+        <div className="h-1 w-16 bg-white"></div>
+      </div>
+
+      <p className="text-white mb-8">Accede a tu cuenta</p>
+      
+      {error && (
+        <div className="mb-4 p-3 bg-red-800 text-white rounded">
+          {error.message}
+        </div>
+      )}
+      
+      <form onSubmit={handleSubmit}>
+        <div className="mb-4">
+          <input 
+            type="email" 
+            name="email"
+            value={formData.email}
+            onChange={handleChange}
+            placeholder="Correo" 
+            className="w-full p-3 rounded border-2 border-yellow-400 focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400"
+            required
+          />
+        </div>
+        <div className="mb-4 relative">
+          <input 
+            type={showPassword ? "text" : "password"}
+            name="password"
+            value={formData.password}
+            onChange={handleChange}
+            placeholder="Contraseña" 
+            className="w-full p-3 rounded border-2 border-yellow-400 focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400"
+            required
+          />
+          <button 
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-red-600"
+          >
+            {showPassword ? "Ocultar" : "Mostrar"}
+          </button>
+        </div>
+        <div className="mb-6 flex items-center">
+          <input 
+            type="checkbox" 
+            id="rememberMe"
+            name="rememberMe"
+            checked={formData.rememberMe}
+            onChange={handleChange}
+            className="mr-2 h-4 w-4 text-yellow-400 border-yellow-400 focus:ring-yellow-400"
+          />
+          <label htmlFor="rememberMe" className="text-white text-sm">Recuérdame</label>
+        </div>
+        <button 
+          type="submit" 
+          disabled={loading}
+          className="w-full bg-white hover:bg-gray-100 text-red-600 font-bold py-3 px-4 rounded transition duration-300 border-2 border-yellow-400 disabled:opacity-70 disabled:cursor-not-allowed"
+        >
+          {loading ? "Procesando..." : "Iniciar Sesión"}
+        </button>
+      </form>
+      
+      <div className="mt-6">
+        <div className="flex items-center justify-center">
+          <div className="h-px w-full bg-white/30"></div>
+          <p className="text-white px-3">O</p>
+          <div className="h-px w-full bg-white/30"></div>
+        </div>
+        
+        <button 
+          onClick={handleGoogleLogin}
+          disabled={loading}
+          className="w-full mt-4 bg-white hover:bg-gray-100 text-black font-semibold py-3 px-4 rounded flex items-center justify-center transition duration-300 border-2 border-yellow-400 disabled:opacity-70 disabled:cursor-not-allowed"
+        >
+          <FcGoogle className="text-xl mr-2" />
+          Continuar con Google
+        </button>
+      </div>
+      
+      <p className="text-white text-sm mt-6 cursor-pointer hover:underline">
+        ¿Olvidó su contraseña?
+      </p>
+      
+      <p className="text-white text-sm mt-4 text-center">
+        ¿No tienes una cuenta? <button onClick={onToggleAuth} className="underline hover:text-gray-300">Crear cuenta</button>
+      </p>
     </div>
   );
 };

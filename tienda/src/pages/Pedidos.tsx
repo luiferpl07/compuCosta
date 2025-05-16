@@ -157,7 +157,7 @@ const Pedidos = () => {
                                         <dd className="ml-2 text-gray-700">
                                           <span className="text-black font-bold">
                                             <FormatoPrecio
-                                              amount={item?.discountedPrice}
+                                              amount={item?.lista1}
                                             />
                                           </span>
                                         </dd>
@@ -170,8 +170,8 @@ const Pedidos = () => {
                                           <span className="text-black font-bold">
                                             <FormatoPrecio
                                               amount={
-                                                item?.discountedPrice *
-                                                item?.quantity
+                                                item?.lista1 *
+                                                item?.cantidad
                                               }
                                             />
                                           </span>
@@ -198,7 +198,7 @@ const Pedidos = () => {
           <p>No has realizado ninguna compra con nosotros</p>
           <Link
             to={"/productos"}
-            className="mt-2 bg-gray-800 text-gray-100 px-6 py-2 rounded-md hover:bg-black hover:text-white duration-200"
+            className="w-full mt-2 rounded-md border border-transparent px-8 py-3 text-base font-medium text-red-500 bg-gray-100 sm:w-auto hover:bg-textoRojo hover:text-white duration-200"
           >
             Ir a comprar
           </Link>

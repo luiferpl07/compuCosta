@@ -3,7 +3,8 @@ import { Product } from "../../type";
 import { store } from "../lib/store";
 import toast from "react-hot-toast";
 import { useEffect, useState } from "react";
-import { FaMinus, FaPlus } from "react-icons/fa";
+import { FaMinus, FaPlus, FaShoppingCart, FaTrash } from "react-icons/fa";
+import { useNavigate, useLocation } from "react-router-dom";
 import PriceTag from "./PriceTag";
 
 const AddToCartBtn = ({
@@ -18,91 +19,138 @@ const AddToCartBtn = ({
   showPrice?: boolean;
 }) => {
   const [existingProduct, setExistingProduct] = useState<Product | null>(null);
-  const { addToCart, cartProduct, decreaseQuantity } = store();
+  const [isAddedToCart, setIsAddedToCart] = useState(false);
+  const { addToCart, cartProduct, decreaseQuantity, removeFromCart } = store();
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  const isCartPage = location.pathname === "/carrito";
 
   useEffect(() => {
-    // Busca el producto en el carrito si existe
-    const availableItem = cartProduct.find((item) => item?.id === product?.id);
+    const availableItem = cartProduct.find((item) => item?.idproducto === product?.idproducto);
     setExistingProduct(availableItem || null);
+    setIsAddedToCart(!!availableItem);
   }, [product, cartProduct]);
 
   const handleAddToCart = () => {
     if (product) {
-      // Solo agregamos el producto, la cantidad se maneja en el store
-      addToCart(product);  
-      toast.success(`${product?.nombre.substring(0, 10)} agregado exitosamente!`);
+      addToCart(product);
+      toast.success(`${product?.nombreproducto.substring(0, 10)} agregado exitosamente!`, {
+        icon: '🛍️',
+        duration: 2000,
+      });
+      setIsAddedToCart(true);
     } else {
       toast.error("Producto no está definido!");
     }
   };
-  
+
   const handleDeleteProduct = () => {
     if (existingProduct) {
       if (existingProduct.cantidad > 1) {
-        decreaseQuantity(existingProduct.id);  // Disminuir la cantidad en el carrito
-        toast.success(`${existingProduct.nombre.substring(0, 10)} disminuido exitosamente`);
+        decreaseQuantity(existingProduct.idproducto);
+        toast.success(`${existingProduct.nombreproducto.substring(0, 10)} disminuido exitosamente`, {
+          icon: '📉',
+          duration: 2000,
+        });
       } else {
-        toast.error("No puedes disminuir menos de 1");
+        toast.error("No puedes disminuir menos de 1", {
+          icon: '⚠️',
+        });
       }
     }
   };
-  
+
+  const handleRemoveFromCart = () => {
+    if (existingProduct) {
+      removeFromCart(existingProduct.idproducto);
+      toast.success(`${existingProduct.nombreproducto.substring(0, 10)} eliminado del carrito`, {
+        icon: '🗑️',
+        duration: 2000,
+      });
+      setIsAddedToCart(false);
+      setExistingProduct(null);
+    }
+  };
+
+  const handleGoToCart = () => {
+    navigate("/carrito");
+  };
 
   const newClassName = twMerge(
     "bg-[#efefef] uppercase text-xs py-3 text-center rounded-full font-semibold hover:bg-textoRojo hover:text-white hover:scale-105 duration-200 cursor-pointer",
     className
   );
 
-  const getRegularPrice = () => {
-    // Si el producto está en el carrito, se multiplica por la cantidad
-    if (existingProduct) {
-      return existingProduct.precio * existingProduct.cantidad;
-    }
-    return product?.precio ?? 0; // Usamos el valor de precio o 0 si es undefined
-  };
-  
-const getDiscountedPrice = () => {
-  if (existingProduct) {
-    // Verificar que precioDescuento no es undefined
-    return existingProduct.precioDescuento ?? 0; 
-  }
-  return product?.precioDescuento ?? 0;
-};
-
   return (
-    <>
+    <div className="flex flex-col gap-3">
       {showPrice && (
         <div>
           <PriceTag
-            precio={getRegularPrice()}
-            precioDescuento={getDiscountedPrice()}
+            precio={existingProduct ? existingProduct.lista2 * existingProduct.cantidad : product?.lista2 ?? 0}
+            precioDescuento={existingProduct ? existingProduct.lista1 ?? 0 : product?.lista1 ?? 0}
           />
         </div>
       )}
-      {existingProduct ? (
-        <div className="flex self-center items-center justify-center gap-2">
-          <button
-            onClick={handleDeleteProduct}
-            className="bg-[#f7f7f7] text-textoRojo p-2 border-[1px] border-gray-200 hover:border-textoAmarillo rounded-full text-sm hover:bg-textoAmarillo duration-200 cursor-pointer"
+      
+      <div className="flex flex-col gap-2">
+        {existingProduct ? (
+          <>
+            <div className="flex self-center items-center justify-center gap-2">
+              <button
+                onClick={handleDeleteProduct}
+                className="bg-[#f7f7f7] text-textoRojo p-2 border-[1px] border-gray-200 hover:border-textoAmarillo rounded-full text-sm hover:bg-textoAmarillo duration-200 cursor-pointer"
+                aria-label="Disminuir cantidad"
+              >
+                <FaMinus />
+              </button>
+              <p className="text-base font-semibold w-10 text-center">{existingProduct?.cantidad}</p>
+              <button
+                onClick={handleAddToCart}
+                className="bg-[#f7f7f7] text-textoRojo p-2 border-[1px] border-gray-200 hover:border-textoAmarillo rounded-full text-sm hover:bg-textoAmarillo duration-200 cursor-pointer"
+                aria-label="Aumentar cantidad"
+              >
+                <FaPlus />
+              </button>
+              <button
+                onClick={handleRemoveFromCart}
+                className="bg-[#f7f7f7] text-textoRojo p-2 border-[1px] border-gray-200 hover:bg-red-100 hover:border-red-300 hover:text-red-600 rounded-full text-sm duration-200 cursor-pointer ml-2"
+                aria-label="Eliminar del carrito"
+              >
+                <FaTrash />
+              </button>
+            </div>
+            {!isCartPage && (
+              <button 
+                onClick={handleGoToCart} 
+                className="flex items-center justify-center gap-2 bg-textoRojo text-white py-3 px-4 rounded-full hover:bg-red-700 transition-all duration-200 text-sm font-medium"
+              >
+                <FaShoppingCart />
+                Ver carrito
+              </button>
+            )}
+          </>
+        ) : isAddedToCart && !isCartPage ? (
+          <button 
+            onClick={handleGoToCart} 
+            className={twMerge(
+              newClassName, 
+              "bg-textoRojo hover:bg-red-700 text-white flex items-center justify-center gap-2"
+            )}
           >
-            <FaMinus />
+            <FaShoppingCart className="text-base" />
+            <span>Ir al carrito</span>
           </button>
-          <p className="text-base font-semibold w-10 text-center">
-            {existingProduct?.cantidad}
-          </p>
-          <button
-            onClick={handleAddToCart}
-            className="bg-[#f7f7f7] text-textoRojo p-2 border-[1px] border-gray-200 hover:border-textoAmarillo rounded-full text-sm hover:bg-textoAmarillo duration-200 cursor-pointer"
+        ) : (
+          <button 
+            onClick={handleAddToCart} 
+            className={twMerge(newClassName, "flex items-center justify-center gap-2")}
           >
-            <FaPlus />
+            <span>{title || "Agregar al carrito"}</span>
           </button>
-        </div>
-      ) : (
-        <button onClick={handleAddToCart} className={newClassName}>
-          {title ? title : "Agregar al carrito"}
-        </button>
-      )}
-    </>
+        )}
+      </div>
+    </div>
   );
 };
 

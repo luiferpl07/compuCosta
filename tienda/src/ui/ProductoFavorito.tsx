@@ -5,27 +5,26 @@ import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import AddToCartBtn from "./AddToCartBtn";
 import FormatoPrecio from "./FormatoPrecio";
+import { getProductImage, getProductImageAlt } from "../../utils/imageUtils";
+
 
 const FavoriteProduct = ({ product }: { product: Product }) => {
   const { removeFromFavorite } = store();
   const navigate = useNavigate();
 
   const handleRemoveFromFavorite = () => {
-    removeFromFavorite(product.id);
+    removeFromFavorite(product.idproducto);
     toast.success("Eliminado de favoritos con éxito!");
   };
 
   // Obtener la imagen principal de forma segura
-  const mainImage = product.imagenes && product.imagenes.length > 0
-    ? product.imagenes.find(img => img.es_principal)?.url || product.imagenes[0]?.url
-    : null;
+  const mainImage = getProductImage(product?.imagenes);
+  const fallbackImageAlt = getProductImageAlt(product?.imagenes, product?.nombreproducto);
 
-  // Obtener el ahorro (si existe un precio anterior en las reviews)
-  const precioAnterior = product.reviews && product.reviews.length > 0
-    ? product.reviews[0]?.calificacion
-    : product.precio;
 
-  const ahorro = precioAnterior ? precioAnterior - product.precio : 0;
+
+
+  const ahorro = product.lista2  - product.lista1 ;
 
   return (
     <div className="flex py-6">
@@ -33,21 +32,25 @@ const FavoriteProduct = ({ product }: { product: Product }) => {
         <div className="lg:flex-1">
           <div className="sm:flex">
             <div>
-              <h4 className="font-medium text-gray-900">{product.nombre}</h4>
+              <h4 className="font-medium text-gray-900">{product.nombreproducto}</h4>
               <p className="mt-2 hidden text-sm text-gray-500 sm:block">
-                {product.descripcionCorta || product.descripcionLarga}
+                {product.caracteristica || product.descripcion}
               </p>
               <p className="text-sm mt-1">
                 Marca:{" "}
                 <span className="font-medium">
-                  {product.marca ? product.marca?.nombre : 'Desconocida'}
+                  {typeof product?.marca === "string" && product.marca !== null
+                    ? product.marca
+                    : "Sin marca"}
                 </span>
               </p>
               <p className="text-sm mt-1">
                 Categoría:{" "}
                 <span className="font-medium">
-                  {product.categorias && product.categorias.length > 0 ? product.categorias[0]?.nombre : 'Desconocida'}
-                </span>
+                    {typeof product?.categorias === "string" && product.categorias !== null
+                                ? product.categorias
+                                : "Sin categoría"}
+                  </span>
               </p>
             </div>
             <span
@@ -72,12 +75,12 @@ const FavoriteProduct = ({ product }: { product: Product }) => {
         )}
       </div>
       <div
-        onClick={() => navigate(`/productos/${product.id}`)}
+        onClick={() => navigate(`/productos/${product.idproducto}`)}
         className="ml-4 flex-shrink-0 h-20 w-20 sm:w-40 sm:h-40 sm:order-first sm:m-0 sm:mr-6 border border-gray-200 rounded-md hover:border-skyText duration-200 cursor-pointer group overflow-hidden"
       >
         <img
-          src={mainImage || '/default-image.jpg'} // Fallback en caso de no encontrar imagen
-          alt={product.imagenes && product.imagenes[0]?.alt_text || product.nombre}
+          src={mainImage}
+          alt={fallbackImageAlt}
           className="h-full w-full rounded-lg object-cover object-center group-hover:scale-110 duration-200"
         />
       </div>

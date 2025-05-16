@@ -13,7 +13,10 @@ import brandFour from "./brands/brandFour.webp";
 import brandFive from "./brands/brandFive.webp";
 import brandSix from "./brands/brandSix.webp";
 import productPayment from "./productPayment.webp";
-import homeBanner from "./homeBanner.jpg";
+import reparaciondepc from "./servicios/reparaciondepc.avif"
+import reparacionTv from "./servicios/reparacionTv.jpg"
+import otrosServicios from "./servicios/otrosServicios.jpg"
+import cableado from "./servicios/cablaeado.jpg"
 import sede1 from "./sede1.jpg";
 import sede2 from "./sede2.jpg";
 
@@ -33,7 +36,11 @@ export {
   brandFive,
   brandSix,
   productPayment,
-  homeBanner,
+
   sede1,
   sede2,
+  reparaciondepc,
+  reparacionTv,
+  otrosServicios,
+  cableado,
 };

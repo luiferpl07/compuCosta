@@ -5,9 +5,11 @@ import { Toaster } from "react-hot-toast";
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   return (
-    <>
+    <div className="min-h-screen flex flex-col">
       <Header />
-      {children}
+      <main className="flex-grow">
+        {children}
+      </main>
       <Footer />
       <Toaster
         position="bottom-right"
@@ -21,7 +23,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           },
         }}
       />
-    </>
+    </div>
   );
 };
 

@@ -14,21 +14,24 @@ export interface CategoryProps {
   nombre: string;
   slug: string;
   descripcion: string;
+  enlaceDestacado?: string;
 }
 
 export interface Product {
-  id: string; // ID único del producto
-  nombre: string; // Nombre del producto
-  precio: number; // Precio del producto
-  descripcionLarga?: string; // Descripción larga (opcional)
-  descripcionCorta?: string; // Descripción corta (opcional)
+  idproducto: string; // ID único del producto
+  nombreproducto: string; // Nombre del producto
+  lista1: number; 
+  porciva:     string;  // Porcentaje IVA
+  ivaincluido:    string// Precio del producto
+  descripcion?: string; // Descripción larga (opcional)
+  caracteristica?: string; // Descripción corta (opcional)
   slug: string; // Slug único
   destacado: boolean; // Si el producto es destacado
   cantidad: number; // Cantidad disponible
   vistaGeneral?: string; // Resumen general del producto (opcional)
   enStock: boolean; // Indica si el producto está en stock
   esNuevo: boolean; // Indica si el producto es nuevo
-  precioDescuento?: number; // Precio con descuento (opcional)
+  lista2: number; // Precio con descuento (opcional)
   puntuacionPromedio: number; // Puntuación promedio basada en las reseñas
   reseñasCount: number; // Número total de reseñas
   created_at: Date; // Fecha de creación
@@ -41,6 +44,7 @@ export interface Product {
     descripcion?: string;
     slug: string;
     imagen?: string;
+    enlaceDestacado?: string;
     
   }[];
 
@@ -71,6 +75,7 @@ export interface Product {
   // Relación con reseñas
   reviews: {
     id: number;
+    id_producto: number;
     nombre_cliente: string; // Nombre del cliente que dejó la reseña
     calificacion: number; // Calificación del producto (1-5)
     comentario?: string; // Comentario del cliente (opcional)
@@ -79,14 +84,7 @@ export interface Product {
   }[];
 }
 
-export interface UserTypes {
-  currentUser: {
-    firstName: string;
-    lastName: string;
-    email: string;
-    id: string;
-  };
-}
+
 
 export interface OrderTypes {
   orderItems: Product[];
@@ -99,6 +97,34 @@ export interface BannerProps {
   id: number; 
   title: string; 
   imageUrl: string; 
-  isActive: boolean; 
+  isActive: boolean;
+  bannerType:  string    
   createdAt: string;
+}
+
+
+export interface UserType {
+  uid: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  avatar?: string;
+  createdAt?: string;
+}
+
+export interface LoginData {
+  email: string;
+  password: string;
+}
+
+export interface RegistrationData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+}
+
+export interface AuthError {
+  code?: string;
+  message: string;
 }

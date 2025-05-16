@@ -23,7 +23,7 @@ const Favorito = () => {
             <div className="-my-6 divide-y divide-gray-200 sm:-my-10">
               {/* Mapea y muestra los productos favoritos */}
               {favoriteProduct.map((product) => (
-                <FavoriteProduct key={product.id} product={product} />
+                <FavoriteProduct key={product.idproducto} product={product} />
               ))}
             </div>
           </div>
