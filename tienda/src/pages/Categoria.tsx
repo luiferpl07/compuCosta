@@ -41,13 +41,13 @@ const Categoria = () => {
     fetchData();
   }, []);
 
-  // Filtrar productos de la misma categoría
+  // Filtrar productos de la misma categoría - CORREGIDO
   useEffect(() => {
     if (!id || allProducts.length === 0) return;
   
     const relatedProducts = allProducts.filter((product: Product) => 
       Array.isArray(product.categorias) && 
-      product.categorias.some(categoria => categoria?.slug === id)
+      product.categorias.some(prodCategoria => prodCategoria?.categoria?.slug === id)
     );
   
     setFilteredProducts(relatedProducts);
@@ -82,7 +82,7 @@ const Categoria = () => {
     setFilteredProducts(sortedAndFiltered);
   }, [priceRange, sortBy]);
 
-  // Función para cambiar de categoría - Modificada para usar la URL deseada
+  // Función para cambiar de categoría
   const handleCategoryChange = (newCategory: string) => {
     setSelectedCategory(newCategory);
     navigate(`/productos?categoria=${newCategory}`);

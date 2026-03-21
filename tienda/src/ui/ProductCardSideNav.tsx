@@ -40,7 +40,78 @@ const ProductCardSideNav = ({ product }: { product?: Product }) => {
     : 0;
 
   const mainImage = getProductImage(product?.imagenes);
-  const fallbackImageAlt = product?.imagenes[0]?.alt_text || `Imagen del producto ${product?.nombreproducto}`;
+  const fallbackImageAlt = product?.imagenes?.[0]?.alt_text || `Imagen del producto ${product?.nombreproducto}`;
+
+  // ✅ ACTUALIZADO: Verificar si Lista 2 está activa
+  const isLista2Active = product?.lista2_activa === true;
+  const hasLista2Price = product?.lista2 && product.lista2 > 0;
+  const showLista2 = isLista2Active && hasLista2Price;
+
+  // Función para obtener SOLO la categoría más específica (subcategoría)
+  const getCategoriesDisplay = (categorias: any) => {
+    if (typeof categorias === "string") {
+      if (categorias.includes(",")) {
+        const categoriasArray = categorias.split(",").map(cat => cat.trim());
+        return categoriasArray[categoriasArray.length - 1];
+      }
+      return categorias;
+    }
+
+    if (!Array.isArray(categorias) || categorias.length === 0) {
+      return "Sin categoría";
+    }
+
+    const categoriasNormalizadas = categorias.map(item => {
+      if (item.categoria) {
+        return item.categoria;
+      } else if (item.nombre) {
+        return item;
+      }
+      return item;
+    });
+
+    const subcategorias = [];
+    const categoriasPadre = [];
+
+    for (const cat of categoriasNormalizadas) {
+      if (cat.padre_id && cat.padre_id !== null) {
+        subcategorias.push(cat);
+      } else {
+        categoriasPadre.push(cat);
+      }
+    }
+
+    if (subcategorias.length > 0) {
+      return subcategorias.map(cat => cat.nombre).join(", ");
+    }
+
+    if (categoriasPadre.length > 0) {
+      return categoriasPadre.map(cat => cat.nombre).join(", ");
+    }
+
+    return "Sin categoría";
+  };
+
+  // Función para obtener la marca
+  const getMarcaDisplay = (marca: any) => {
+    if (typeof marca === "string") {
+      return marca;
+    }
+
+    if (Array.isArray(marca) && marca.length > 0) {
+      if (marca[0]?.marca?.nombre) {
+        return marca[0].marca.nombre;
+      }
+      if (typeof marca[0] === "string") {
+        return marca[0];
+      }
+      if (marca[0]?.nombre) {
+        return marca[0].nombre;
+      }
+    }
+
+    return "Sin marca";
+  };
 
   return (
     <div className="absolute right-1 top-1 flex flex-col gap-1 transition translate-x-12 group-hover:translate-x-0 duration-300">
@@ -105,35 +176,52 @@ const ProductCardSideNav = ({ product }: { product?: Product }) => {
                         <p className="text-sm mt-2">
                           Marca:{" "}
                           <span className="font-medium">
-                            {typeof product?.marca === "string" && product.marca !== null
-                              ? product.marca
-                              : "Sin marca"}
+                            {getMarcaDisplay(product?.marca)}
                           </span>
                         </p>
 
                         <p className="text-sm mt-1">
                           Categoría:{" "}
                           <span className="font-medium">
-                            {typeof product?.categorias === "string" && product.categorias !== null
-                              ? product.categorias
-                              : "Sin categoría"}
+                            {getCategoriesDisplay(product?.categorias)}
                           </span>
                         </p>
-                        <div className="flex mt-4">
-                          <p className="text-lg font-semibold">
-                            <FormatoPrecio amount={product.lista1} />
-                          </p>
+
+                        {/* ✅ ACTUALIZADO: Mostrar precios según estado de Lista 2 solo cuando hay descuento real */}
+                        <div className="flex flex-col gap-2 mt-4">
+                          {showLista2 && product.lista2 > product.lista1 ? (
+                            // Solo mostrar precios comparativos cuando Lista 2 está activa Y hay descuento real
+                            <div className="flex items-center gap-2">
+                              <p className="text-lg font-semibold text-green-600">
+                                <FormatoPrecio amount={product.lista1} />
+                              </p>
+                              <p className="text-sm text-gray-500 line-through">
+                                <FormatoPrecio amount={product.lista2} />
+                              </p>
+                              <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+                                ¡Oferta!
+                              </span>
+                            </div>
+                          ) : (
+                            // Mostrar solo el precio normal cuando Lista 2 no está activa o no hay descuento
+                            <p className="text-lg font-semibold text-gray-900">
+                              <FormatoPrecio amount={product.lista1} />
+                            </p>
+                          )}
                         </div>
+
                         <div className="mt-4">
-                          {product?.enStock ? (
+                          {product?.cantidad ? (
                             <p className="text-sm text-green-500">En Stock</p>
                           ) : (
                             <p className="text-sm text-red-500">Agotado</p>
                           )}
                         </div>
-                        {product?.lista2 && (
-                          <p className="text-sm text-green-600 mt-2">
-                            Ahorras <FormatoPrecio amount={product.lista2 - product.lista1} />
+
+                        {/* ✅ ACTUALIZADO: Solo mostrar ahorro si Lista 2 está activa Y hay descuento real */}
+                        {showLista2 && product.lista2 > product.lista1 && (
+                          <p className="text-sm text-green-600 mt-2 bg-green-50 p-2 rounded-md">
+                            🎉 Ahorras <FormatoPrecio amount={product.lista2 - product.lista1} />
                           </p>
                         )}
                       </div>

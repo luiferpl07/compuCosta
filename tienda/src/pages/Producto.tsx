@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useParams, useLocation, useNavigate, Link  } from "react-router-dom";
 import { config } from "../../config";
 import { Product, CategoryProps } from "../../type";
@@ -6,9 +6,10 @@ import { getData } from "../lib";
 import Loading from "../ui/Loading";
 import Container from "../ui/Container";
 import PriceTag from "../ui/PriceTag";
-import { FaRegEye } from "react-icons/fa";
+import { FaRegEye, FaFilter } from "react-icons/fa";
 import { MdStar, MdStarHalf, MdOutlineStarOutline } from "react-icons/md";
 import { IoChevronBack, IoChevronForward, IoClose } from "react-icons/io5";
+import { HiAdjustments } from "react-icons/hi";
 import FormatoPrecio from "../ui/FormatoPrecio";
 import AddToCartBtn from "../ui/AddToCartBtn";
 import { productPayment } from "../assets";
@@ -18,8 +19,7 @@ import ReviewsSection from "../ui/Review";
 import ProductDescription from "../ui/DescripcionProducto";
 import CaracteristicaProducto from "../ui/CaracteristicaProducto";
 import { getProductImage } from "../../utils/imageUtils";
-
-
+import toast from "react-hot-toast";
 
 interface Review {
   id: number;
@@ -31,10 +31,9 @@ interface Review {
   aprobado: boolean;
 }
 
-const ITEMS_PER_PAGE = 12;
+const ITEMS_PER_PAGE = 28;
 
 const Producto = () => {
-
   const [productData, setProductData] = useState<Product | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
@@ -44,13 +43,17 @@ const Producto = () => {
   const [loading, setLoading] = useState(false);
   const [imgUrl, setImgUrl] = useState("");
   const [selectedColor, setSelectedColor] = useState<Product["colores"][0] | null>(null);
-  const [priceRange, setPriceRange] = useState<[number, number]>([0, 1000]);
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 20000000]);
   const [currentPage, setCurrentPage] = useState(1);
   const [categorySelected, setCategorySelected] = useState<CategoryProps | null>(null);
   const [categories, setCategories] = useState<CategoryProps[]>([]);
-  const { id } = useParams<{ id: string }>();
-
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
   
+  const { id } = useParams<{ id: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const isInitializedRef = useRef(false);
 
   const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
 
@@ -60,19 +63,42 @@ const Producto = () => {
     return filteredProducts.slice(startIndex, endIndex);
   };
 
-  useEffect(() => {
-    if (categories.length > 0) {
-      const foundCategory = categories.find((cat) => cat.slug === selectedCategory) || null;
-      setCategorySelected(foundCategory);
-    }
-  }, [selectedCategory, categories]);
+  const getUrlParams = useCallback(() => {
+    const urlParams = new URLSearchParams(location.search);
+    return {
+      categoria: urlParams.get('categoria') || '',
+      busqueda: urlParams.get('busqueda') || ''
+    };
+  }, [location.search]);
 
+  // ─── Reset ref al desmontar para permitir recarga al volver ───────────────
   useEffect(() => {
-    const fetchProducts = async () => {
+    return () => {
+      isInitializedRef.current = false;
+    };
+  }, []);
+
+  // ─── EFFECT PRINCIPAL - Carga inicial de datos ────────────────────────────
+  useEffect(() => {
+    const fetchInitialData = async () => {
       try {
         setLoading(true);
+        
         if (id) {
+          // ── VISTA INDIVIDUAL ──────────────────────────────────────────────
+          setProductData(null);
+          setReviews([]);
+          setImgUrl("");
+          setSelectedColor(null);
+          
           const data = await getData(`${config?.baseUrl}${config?.apiPrefix}/products/${id}`);
+          
+          if (data && (!data.activo || (data.cantidad || 0) <= 0)) {
+            navigate('/productos');
+            toast.error('Este producto no está disponible o está agotado');
+            return;
+          }
+          
           setProductData(data);
 
           const reviewsResponse = await getData(`${config?.baseUrl}${config?.apiPrefix}/reviews?productId=${id}`);
@@ -80,101 +106,272 @@ const Producto = () => {
             const filteredReviews = reviewsResponse.filter(review => review.id_producto === Number(id));
             setReviews(filteredReviews);
           }
-        } else {
-          const data = await getData(`${config?.baseUrl}${config?.apiPrefix}/products`);
-          const categoriesData = await getData(`${config?.baseUrl}${config?.apiPrefix}/categories`);
-          
-          // Store categories in state
-          setCategories(categoriesData);
-          
-          setAllProducts(data);
-          setFilteredProducts(data);
-          
-          // Set category if there's a category in the URL
-          const urlParams = new URLSearchParams(window.location.search);
-          const categorySlug = urlParams.get('categoria');
-          if (categorySlug) {
-            const foundCategory = categoriesData.find((cat: CategoryProps) => cat.slug === categorySlug);
-            setCategorySelected(foundCategory || null);
-            setSelectedCategory(categorySlug);
+
+        } else if (!isInitializedRef.current) {
+          console.log('📄 Cargando datos del listado...');
+
+          // ── FIX: Loop paginado para traer TODOS los productos ─────────────
+          let productsData: any[] = [];
+          let cursor: number | null = null;
+
+          do {
+            const url = `${config?.baseUrl}${config?.apiPrefix}/products?limit=100${cursor ? `&cursor=${cursor}` : ""}`;
+            const res = await getData(url);
+            const page = res?.productos || [];
+            productsData = [...productsData, ...page];
+            cursor = res?.nextCursor ?? null;
+            console.log(`📦 Página cargada: ${page.length} productos | Total acumulado: ${productsData.length} | hasMore: ${res?.hasMore}`);
+          } while (cursor !== null);
+
+          // Cargar categorías y reseñas en paralelo (ya tenemos todos los productos)
+          const [categoriesData, allReviewsData] = await Promise.all([
+            getData(`${config?.baseUrl}${config?.apiPrefix}/categories`),
+            fetch(`${config?.baseUrl}${config?.apiPrefix}/reviews`, {
+              cache: 'no-store'
+            }).then(res => res.json())
+          ]);
+
+          console.log('📦 Datos cargados:', {
+            totalProductos: productsData.length,
+            totalCategorias: categoriesData.length,
+            totalReseñas: allReviewsData.length
+          });
+
+          // Mapa de categorías por slug para búsqueda rápida
+          const categoriasMap = new Map();
+          categoriesData.forEach((cat: CategoryProps) => {
+            categoriasMap.set(cat.slug, cat);
+          });
+
+          // Filtrar solo activos con stock
+          const productosActivos = productsData.filter((product: any) => {
+            const tieneStock = (product.cantidad || 0) > 0;
+            const estaActivo = product.activo === true;
+            return estaActivo && tieneStock;
+          });
+
+          console.log('✅ Productos activos con stock:', productosActivos.length);
+
+          const enhancedProducts = productosActivos.map((product: any) => {
+            const productReviews = Array.isArray(allReviewsData)
+              ? allReviewsData.filter((review: any) =>
+                  Number(review.id_producto) === Number(product.idproducto)
+                )
+              : [];
+
+            const reviewCount = productReviews.length;
+            const averageRating = reviewCount > 0
+              ? productReviews.reduce((acc: number, rev: any) => acc + rev.calificacion, 0) / reviewCount
+              : 0;
+
+            // ── FIX: Preservar el string original de categorías correctamente ──
+            let categoriasAdaptadas: any[] = [];
+            let categoriasRaw: string | null = null;
+
+            if (Array.isArray(product.categorias)) {
+              categoriasAdaptadas = product.categorias;
+            } else if (typeof product.categorias === 'string') {
+              categoriasRaw = product.categorias;
+              categoriasAdaptadas = product.categorias; // string directo al ProductCard
+            }
+
+            return {
+              ...product,
+              categorias: categoriasAdaptadas,
+              _categoriasRaw: categoriasRaw,   // string original del listado
+              _categoriasMap: categoriasMap,    // mapa para resolver slugs
+              enStock: true,
+              reseñasCount: reviewCount,
+              puntuacionPromedio: averageRating,
+              reviews: productReviews.map((rev: any) => ({ calificacion: rev.calificacion })),
+            };
+          });
+
+          // Construir árbol de categorías activas
+          const categoriasActivas = categoriesData.filter((cat: CategoryProps) => cat.activo === true);
+          const parentCategories = categoriasActivas.filter((cat: CategoryProps) => cat.padre_id === null);
+          const childCategories  = categoriasActivas.filter((cat: CategoryProps) => cat.padre_id !== null);
+
+          const categoriesWithSubcategories = parentCategories.map((parent: CategoryProps) => ({
+            ...parent,
+            subcategorias: childCategories.filter((child: CategoryProps) => child.padre_id === parent.id)
+          }));
+
+          setCategories(categoriesWithSubcategories);
+          setAllProducts(enhancedProducts);
+
+          const { categoria } = getUrlParams();
+          if (categoria) {
+            console.log('🎯 Categoría inicial desde URL:', categoria);
+            setSelectedCategory(categoria);
+          } else {
+            setFilteredProducts(enhancedProducts);
           }
+
+          isInitializedRef.current = true;
         }
       } catch (error) {
-        console.error("Error al cargar los productos", error);
+        console.error("❌ Error al cargar los datos iniciales:", error);
+        toast.error('Error al cargar los productos');
       } finally {
         setLoading(false);
       }
     };
-    fetchProducts();
+
+    fetchInitialData();
+  }, [id, navigate, getUrlParams]);
+
+  // ─── Detecta cambios en URL ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!isInitializedRef.current || id) return;
+
+    const { categoria } = getUrlParams();
+    console.log('🔄 URL cambió, actualizando categoría:', categoria);
+    setSelectedCategory(categoria);
+    setCurrentPage(1);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [location.search, getUrlParams, id]);
+
+  // ─── Scroll al top al ver producto individual ─────────────────────────────
+  useEffect(() => {
+    if (id) window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [id]);
 
-
+  // ─── Resuelve la categoría seleccionada en el árbol ───────────────────────
   useEffect(() => {
-    if (productData?.imagenes) {
-      setImgUrl(getProductImage(productData.imagenes));
+    if (categories.length === 0 || !selectedCategory) {
+      setCategorySelected(null);
+      return;
     }
-    if (productData?.colores) {
-      setSelectedColor(productData.colores[0] || null);
-    }
-  }, [productData]);
 
+    let foundCategory: CategoryProps | undefined;
+
+    foundCategory = categories.find(cat => cat.slug === selectedCategory);
+
+    if (!foundCategory) {
+      for (const parent of categories) {
+        if (parent.subcategorias && Array.isArray(parent.subcategorias)) {
+          foundCategory = parent.subcategorias.find(
+            sub => sub.slug === selectedCategory && sub.activo === true
+          );
+          if (foundCategory) break;
+        }
+      }
+    }
+
+    console.log('📂 Categoría seleccionada:', foundCategory?.nombre || 'Ninguna');
+    setCategorySelected(foundCategory || null);
+  }, [selectedCategory, categories]);
+
+  // ─── Aplica filtros y orden ───────────────────────────────────────────────
   useEffect(() => {
-    if (!allProducts.length) return;
-    
+    if (allProducts.length === 0) {
+      console.log('⏳ Esperando productos...');
+      return;
+    }
+
+    const { busqueda } = getUrlParams();
+
+    console.log('🔍 Aplicando filtros:', {
+      productosDisponibles: allProducts.length,
+      selectedCategory,
+      busqueda,
+      priceRange
+    });
+
     const sortedAndFiltered = allProducts
       .filter(product => {
-        if (!product.categorias || !Array.isArray(product.categorias)) {
-          return selectedCategory === "";
+        // Filtro de búsqueda
+        if (busqueda) {
+          const searchLower = busqueda.toLowerCase();
+          const matchesSearch =
+            product.nombreproducto.toLowerCase().includes(searchLower) ||
+            (product.descripcion && product.descripcion.toLowerCase().includes(searchLower));
+          if (!matchesSearch) return false;
         }
-        
-        const belongsToCategory = selectedCategory === "" || 
-          product.categorias.some(cat => cat.slug === selectedCategory);
-        
-        const inPriceRange = 
+
+  
+      if (selectedCategory) {
+        if (Array.isArray(product.categorias) && product.categorias.length > 0) {
+          const belongs = product.categorias.some((pc: any) => {
+            const slugHijo  = pc.categoria?.slug;
+            const slugPadre = pc.categoria?.padre?.slug;
+            return slugHijo === selectedCategory || slugPadre === selectedCategory;
+          });
+          if (!belongs) return false;
+
+        } else if ((product as any)._categoriasRaw) {
+          const raw = (product as any)._categoriasRaw as string;
+          const categoriaSeleccionada = (product as any)._categoriasMap?.get(selectedCategory);
+          if (!categoriaSeleccionada) return false;
+
+          const nombreBuscado = categoriaSeleccionada.nombre.toLowerCase().trim();
+          const esPadre = categoriaSeleccionada.padre_id === null;
+          const rawLower = raw.toLowerCase();
+
+          let coincide = false;
+
+          if (esPadre) {
+            // FIX: regex para padre que puede tener comas en su nombre
+            const regex = new RegExp(`(^|,\\s*)${nombreBuscado.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*(–|→|$|,)`, 'i');
+            coincide = regex.test(rawLower);
+          } else {
+            // Para hijo: buscar el nombre exacto después de un separador
+            const regex = new RegExp(`(–|→)\\s*${nombreBuscado.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*(,|$)`, 'i');
+            coincide = regex.test(rawLower);
+          }
+
+          if (!coincide) return false;
+        } else {
+          return false;
+        }
+      }
+        // Filtro de precio
+        const inPriceRange =
           (product.lista1 >= priceRange[0] && product.lista1 <= priceRange[1]) ||
           (product.lista2 >= priceRange[0] && product.lista2 <= priceRange[1]);
-        
-        return belongsToCategory && inPriceRange;
+
+        return inPriceRange;
       })
       .sort((a, b) => {
         switch (sortBy) {
-          case "name_asc":
-            return a.nombreproducto.localeCompare(b.nombreproducto);
-          case "name_desc":
-            return b.nombreproducto.localeCompare(a.nombreproducto);
-          case "price_asc":
-            return (a.lista2 || a.lista1) - (b.lista2 || b.lista1);
-          case "price_desc":
-            return (b.lista2 || b.lista1) - (a.lista2 || a.lista1);
-          case "rating_desc":
-            return b.puntuacionPromedio - a.puntuacionPromedio;
-          default:
-            return 0;
+          case "name_asc":  return a.nombreproducto.localeCompare(b.nombreproducto);
+          case "name_desc": return b.nombreproducto.localeCompare(a.nombreproducto);
+          case "price_asc": return (a.lista2 || a.lista1) - (b.lista2 || b.lista1);
+          case "price_desc": return (b.lista2 || b.lista1) - (a.lista2 || a.lista1);
+          case "rating_desc": return (b.puntuacionPromedio || 0) - (a.puntuacionPromedio || 0);
+          default: return 0;
         }
       });
-    
+
+    console.log('✅ Productos después de filtros:', sortedAndFiltered.length);
     setFilteredProducts(sortedAndFiltered);
     setCurrentPage(1);
-  }, [allProducts, selectedCategory, sortBy, priceRange]);
+  }, [allProducts, selectedCategory, sortBy, priceRange, getUrlParams]);
 
-  const handleCategoryChange = (category: string) => {
+  // ─── Cambio de categoría ──────────────────────────────────────────────────
+  const handleCategoryChange = useCallback((category: string) => {
+    console.log('🎯 Cambiando categoría a:', category);
+
     const currentUrl = new URL(window.location.href);
-    
-    if (category) {
-      currentUrl.searchParams.set('categoria', category);
-    } else {
-      currentUrl.searchParams.delete('categoria');
-    }
-    
+    currentUrl.searchParams.delete('categoria');
+    currentUrl.searchParams.delete('busqueda');
+    if (category) currentUrl.searchParams.set('categoria', category);
+
     window.history.pushState({}, '', currentUrl.toString());
     setSelectedCategory(category);
     setCurrentPage(1);
-  };
+  }, []);
+
+  // ─── Imagen y color inicial del producto individual ───────────────────────
+  useEffect(() => {
+    if (productData?.imagenes) setImgUrl(getProductImage(productData.imagenes));
+    if (productData?.colores)  setSelectedColor(productData.colores[0] || null);
+  }, [productData]);
 
   const handleAddReview = (newReview: Review) => {
     setProductData((prevData) => {
       if (!prevData) return null;
-  
       return {
         ...prevData,
         reviews: [
@@ -191,40 +388,31 @@ const Producto = () => {
   };
 
   const getPageNumbers = () => {
-    const pageNumbers = [];
+    const pageNumbers: (number | string)[] = [];
     const maxVisiblePages = 5;
-    
+
     if (totalPages <= maxVisiblePages) {
-      for (let i = 1; i <= totalPages; i++) {
-        pageNumbers.push(i);
-      }
+      for (let i = 1; i <= totalPages; i++) pageNumbers.push(i);
     } else {
       if (currentPage <= 3) {
-        for (let i = 1; i <= 4; i++) {
-          pageNumbers.push(i);
-        }
+        for (let i = 1; i <= 4; i++) pageNumbers.push(i);
         pageNumbers.push('...');
         pageNumbers.push(totalPages);
       } else if (currentPage >= totalPages - 2) {
         pageNumbers.push(1);
         pageNumbers.push('...');
-        for (let i = totalPages - 3; i <= totalPages; i++) {
-          pageNumbers.push(i);
-        }
+        for (let i = totalPages - 3; i <= totalPages; i++) pageNumbers.push(i);
       } else {
         pageNumbers.push(1);
         pageNumbers.push('...');
-        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
-          pageNumbers.push(i);
-        }
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) pageNumbers.push(i);
         pageNumbers.push('...');
         pageNumbers.push(totalPages);
       }
     }
-    
+
     return pageNumbers;
   };
-
 
   const averageRating = useMemo(() => {
     if (!reviews || reviews.length === 0) return "0.0";
@@ -232,23 +420,55 @@ const Producto = () => {
     return (sum / reviews.length).toFixed(1);
   }, [reviews]);
 
-  if (loading) {
-    return <Loading />;
-  }
+  const getCategoriesDisplay = (categorias: any[]) => {
+    if (!Array.isArray(categorias) || categorias.length === 0) return "Sin categoría";
 
+    const subcategorias = categorias.filter(cat => {
+      const categoria = cat.categoria || cat;
+      return categoria.padre_id !== null && categoria.padre_id !== undefined;
+    });
+
+    if (subcategorias.length > 0) {
+      return subcategorias.map(item => {
+        const categoria = item.categoria || item;
+        return categoria.nombre || "Sin nombre";
+      }).join(", ");
+    }
+
+    const categoriasPadre = categorias.filter(cat => {
+      const categoria = cat.categoria || cat;
+      return categoria.padre_id === null || categoria.padre_id === undefined;
+    });
+
+    if (categoriasPadre.length > 0) {
+      return categoriasPadre.map(item => {
+        const categoria = item.categoria || item;
+        return categoria.nombre || "Sin nombre";
+      }).join(", ");
+    }
+
+    return "Sin categoría";
+  };
+
+  const isLista2Active  = productData?.lista2_activa === true;
+  const hasLista2Price  = productData?.lista2 && productData.lista2 > 0;
+  const showLista2      = isLista2Active && hasLista2Price;
+
+  if (loading) return <Loading />;
+
+  // ─── VISTA INDIVIDUAL DEL PRODUCTO ───────────────────────────────────────
   if (id && productData) {
     return (
       <Container>
         <div className="flex flex-col">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mb-6">
-            {/* Galería de imágenes */}
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex md:flex-col gap-2 order-2 md:order-1">
-                {productData.imagenes.map((item) => (
+                {productData.imagenes.map((item, index) => (
                   <img
                     src={getProductImage([item])}
                     alt={item.alt_text || "Imagen del producto"}
-                    key={item.id}
+                    key={item.id ?? index}
                     className={`w-24 h-24 object-cover cursor-pointer rounded-lg ${
                       imgUrl === getProductImage([item])
                         ? "border-2 border-amber-500"
@@ -267,11 +487,30 @@ const Producto = () => {
               </div>
             </div>
 
-            {/* Información del producto */}
             <div className="flex flex-col gap-4">
               <h2 className="text-3xl font-bold">{productData.nombreproducto}</h2>
+
               <div className="flex items-center justify-between">
-                <PriceTag precio={productData.lista2} precioDescuento={productData.lista1} className="text-xl" />
+                <div className="flex flex-col gap-2">
+                  {showLista2 && productData.lista2 > productData.lista1 ? (
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl font-bold text-green-600">
+                        <FormatoPrecio amount={productData.lista1} />
+                      </span>
+                      <span className="text-xl text-gray-500 line-through">
+                        <FormatoPrecio amount={productData.lista2} />
+                      </span>
+                      <span className="px-3 py-1 bg-green-100 text-green-800 text-sm font-medium rounded-full">
+                        ¡Oferta!
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-3xl font-bold text-gray-900">
+                      <FormatoPrecio amount={productData.lista1} />
+                    </span>
+                  )}
+                </div>
+
                 <div className="flex items-center gap-2">
                   <span className="text-2xl font-bold text-gray-900">{averageRating}</span>
                   <div className="flex items-center">
@@ -279,7 +518,6 @@ const Producto = () => {
                       const ratingValue = index + 1;
                       const isHalfStar = parseFloat(averageRating) - index > 0 && parseFloat(averageRating) - index < 1;
                       const isFullStar = parseFloat(averageRating) >= ratingValue;
-                      
                       return isFullStar ? (
                         <MdStar key={index} className="text-yellow-400" />
                       ) : isHalfStar ? (
@@ -293,15 +531,26 @@ const Producto = () => {
                 </div>
               </div>
 
-              <p>
-                Estás ahorrando
-                <span className="text-base font-semibold text-green-500">
-                  <FormatoPrecio amount={(productData.lista2 || 0) - (productData.lista1 || 0)} />
-                </span>{" "}
-                al comprar
-              </p>
+              {showLista2 && productData.lista2 > productData.lista1 && (
+                <p className="text-lg">
+                  Estás ahorrando
+                  <span className="text-base font-semibold text-green-500 ml-2">
+                    <FormatoPrecio amount={productData.lista2 - productData.lista1} />
+                  </span>{" "}
+                  al comprar
+                </p>
+              )}
 
-              {/* Selector de colores */}
+              <div className="flex items-center gap-2">
+                {(productData.cantidad || 0) > 0 ? (
+                  <span className="text-green-600 font-semibold">
+                    ✓ En stock ({productData.cantidad} disponibles)
+                  </span>
+                ) : (
+                  <span className="text-red-600 font-semibold">✗ Agotado</span>
+                )}
+              </div>
+
               <div>
                 {selectedColor && (
                   <p>
@@ -311,7 +560,6 @@ const Producto = () => {
                     </span>
                   </p>
                 )}
-
                 <div className="flex items-center gap-x-3">
                   {productData.colores.map((item) => (
                     <div
@@ -330,7 +578,6 @@ const Producto = () => {
                     </div>
                   ))}
                 </div>
-
                 {selectedColor && (
                   <button
                     onClick={() => setSelectedColor(null)}
@@ -342,31 +589,38 @@ const Producto = () => {
               </div>
 
               <p>
-                  Marca:{" "}
-                  <span className="font-medium">
-                    {Array.isArray(productData?.marca) && productData.marca.length > 0
-                      ? productData.marca[0].marca.nombre
-                      : "Sin marca"}
-                  </span>
-                </p>
-                <p>
-                  Categoría:{" "}
-                  <span className="font-medium">
-                    {Array.isArray(productData?.categorias) && productData.categorias.length > 0
-                      ? productData.categorias[0].nombre
-                      : "Sin categoría"}
-                  </span>
-                </p>
-                <br />
-              <AddToCartBtn
-                product={productData}
-                title="Comprar ahora"
-                className="bg-black/80 py-3 text-base text-gray-200 hover:text-white duration-200"
-                showPrice={false}
-              />
+                Marca:{" "}
+                <span className="font-medium">
+                  {Array.isArray(productData?.marca) && productData.marca.length > 0
+                    ? productData.marca[0].marca.nombre
+                    : "Sin marca"}
+                </span>
+              </p>
+              <p>
+                Categoría:{" "}
+                <span className="font-medium">
+                  {getCategoriesDisplay(productData?.categorias || [])}
+                </span>
+              </p>
+              <br />
+
+              {(productData.cantidad || 0) > 0 ? (
+                <AddToCartBtn
+                  product={productData}
+                  title="Comprar ahora"
+                  className="bg-black/80 py-3 text-base text-gray-200 hover:text-white duration-200"
+                  showPrice={false}
+                />
+              ) : (
+                <button
+                  disabled
+                  className="bg-gray-400 py-3 text-base text-gray-200 cursor-not-allowed rounded-md"
+                >
+                  Producto agotado
+                </button>
+              )}
 
               <div className="bg-[#f7f7f7] p-5 rounded-md flex flex-col items-center justify-center gap-2">
-                <img src={productPayment} alt="Pago seguro" className="w-auto object-cover" />
                 <p className="font-semibold">Garantía de pago seguro y protegido</p>
               </div>
             </div>
@@ -380,100 +634,169 @@ const Producto = () => {
     );
   }
 
+  // ─── VISTA DE LISTADO DE PRODUCTOS ───────────────────────────────────────
+  const { busqueda } = getUrlParams();
+
   return (
-    <div className="flex flex-col md:flex-row">
-      {/* Sidebar de filtros */}
-      <div className="w-full md:w-1/4 lg:w-1/5 xl:w-1/5 md:min-w-[250px] md:max-w-[300px] md:sticky md:top-0 md:h-screen overflow-y-auto p-4 border-b md:border-b-0 md:border-r border-gray-200 bg-white">
-        <Filters
-          selectedCategory={selectedCategory}
-          priceRange={priceRange}
-          onCategoryChange={handleCategoryChange}
-          onPriceRangeChange={setPriceRange}
-          onFilterProducts={setFilteredProducts}
-        />
-      </div>
-
-      {/* Contenido principal */}
-      <div className="flex-grow w-full md:w-3/4 lg:w-4/5 xl:w-4/5 px-2 sm:px-4 py-4 sm:py-6 overflow-y-auto relative">
-      
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0 mb-4 sm:mb-6">
-          <p className="text-sm text-gray-500">
-            Mostrando {Math.min(ITEMS_PER_PAGE, filteredProducts.length)} de {filteredProducts.length} productos
-          </p>
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            className="w-full sm:w-auto border border-gray-300 rounded-md py-1.5 px-2 text-sm focus:outline-none focus:ring-1 focus:ring-amber-500"
-          >
-            <option value="rating_desc">Mejor valorados</option>
-            <option value="price_asc">Menor precio</option>
-            <option value="price_desc">Mayor precio</option>
-            <option value="name_asc">A-Z</option>
-            <option value="name_desc">Z-A</option>
-          </select>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-4 md:gap-6">
-          {getCurrentPageProducts().map((item: Product) => (
-            <div key={item.idproducto} className="relative">
-              <ProductCard item={item} />
-            </div>
-          ))}
-        </div>
-
-        {filteredProducts.length === 0 ? (
-          <p className="text-center text-gray-500 mt-8 sm:mt-10">
-            No se encontraron productos en esta categoría.
-          </p>
-        ) : (
-          <div className="flex flex-col items-center">
-            <div className="mt-6 sm:mt-8 flex justify-center items-center gap-1 sm:gap-2">
-              <button
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-                className="p-1.5 sm:p-2 rounded-md border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
-              >
-                <IoChevronBack className="w-4 h-4 sm:w-5 sm:h-5" />
-              </button>
-
-              {getPageNumbers().map((pageNum, index) => (
-                <button
-                  key={index}
-                  onClick={() => typeof pageNum === "number" && setCurrentPage(pageNum)}
-                  className={`px-3 sm:px-4 py-1.5 sm:py-2 text-sm sm:text-base rounded-md ${
-                    pageNum === currentPage
-                      ? "bg-amber-500 text-white"
-                      : pageNum === "..."
-                      ? "cursor-default"
-                      : "border border-gray-300 hover:bg-gray-100"
-                  }`}
-                >
-                  {pageNum}
-                </button>
-              ))}
-
-              <button
-                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="p-1.5 sm:p-2 rounded-md border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
-              >
-                <IoChevronForward className="w-4 h-4 sm:w-5 sm:h-5" />
-              </button>
-
-              {/* Featured Link Moved Here and Made Reactive */}
-              {categorySelected?.enlaceDestacado && (
-                <a 
-                  href={categorySelected.enlaceDestacado}
-                  target="_blank" 
-                  className="ml-2 bg-red-600 text-white px-4 py-2 rounded-md text-sm font-semibold shadow-md hover:bg-red-700 flex items-center justify-center"
-                  
-                >
-                  Ver más {categorySelected?.nombre || 'esta categoría'}
-                </a>
-              )}
+    <div className="min-h-screen bg-white">
+      <div className="w-full px-2 sm:px-4 lg:px-6 xl:px-8 py-4">
+        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
+          <div className="w-full lg:w-64 xl:w-72 flex-shrink-0">
+            <div className="bg-white border border-gray-200 rounded-lg p-3 lg:p-4 sticky top-4">
+              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-200">
+                <HiAdjustments className="w-5 h-5 text-gray-700" />
+                <h2 className="text-lg font-semibold text-gray-900">Filtros</h2>
+              </div>
+              <Filters
+                selectedCategory={selectedCategory}
+                priceRange={priceRange}
+                onCategoryChange={handleCategoryChange}
+                onPriceRangeChange={setPriceRange}
+              />
             </div>
           </div>
-        )}
+
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 bg-white border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center gap-4">
+                <p className="text-gray-700">
+                  <span className="font-bold">{filteredProducts.length}</span> productos encontrados
+                </p>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  {selectedCategory && categorySelected && (
+                    <div className="flex items-center gap-2 px-3 py-1 bg-red-50 text-red-600 rounded-full text-sm border border-red-200">
+                      <span>Categoría: {categorySelected.nombre}</span>
+                      <button onClick={() => handleCategoryChange("")} className="hover:text-red-800">
+                        <IoClose className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
+                  {busqueda && (
+                    <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-sm border border-blue-200">
+                      <span>Búsqueda: "{busqueda}"</span>
+                      <button
+                        onClick={() => {
+                          const currentUrl = new URL(window.location.href);
+                          currentUrl.searchParams.delete('busqueda');
+                          window.history.pushState({}, '', currentUrl.toString());
+                          window.location.reload();
+                        }}
+                        className="hover:text-blue-800"
+                      >
+                        <IoClose className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <label className="text-gray-700 text-sm hidden sm:block">Ordenar por:</label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="rating_desc">Mejor valorados</option>
+                  <option value="price_asc">Menor precio</option>
+                  <option value="price_desc">Mayor precio</option>
+                  <option value="name_asc">A-Z</option>
+                  <option value="name_desc">Z-A</option>
+                </select>
+              </div>
+            </div>
+
+            {filteredProducts.length === 0 ? (
+              <div className="bg-white border border-gray-200 rounded-lg p-12 text-center">
+                <div className="text-gray-400 text-6xl mb-4">🔍</div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  No se encontraron productos
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  {busqueda
+                    ? `No hay productos que coincidan con "${busqueda}"`
+                    : selectedCategory && categorySelected
+                    ? `No hay productos disponibles en la categoría "${categorySelected.nombre}"`
+                    : "Intenta ajustar los filtros o busca productos diferentes"}
+                </p>
+                <button
+                  onClick={() => {
+                    handleCategoryChange("");
+                    setPriceRange([0, 20000000]);
+                    const currentUrl = new URL(window.location.href);
+                    currentUrl.searchParams.delete('busqueda');
+                    window.history.pushState({}, '', currentUrl.toString());
+                  }}
+                  className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Limpiar todos los filtros
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-3 lg:gap-4">
+                  {getCurrentPageProducts().map((item: Product) => (
+                    <div key={item.idproducto} className="group">
+                      <ProductCard item={item} />
+                    </div>
+                  ))}
+                </div>
+
+                {totalPages > 1 && (
+                  <div className="mt-12 flex flex-col items-center">
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                        disabled={currentPage === 1}
+                        className="p-2 rounded-md text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <IoChevronBack className="w-5 h-5" />
+                      </button>
+
+                      {getPageNumbers().map((pageNum, index) => (
+                        <button
+                          key={index}
+                          onClick={() => typeof pageNum === "number" && setCurrentPage(pageNum)}
+                          className={`px-4 py-2 text-sm rounded-md transition-colors ${
+                            pageNum === currentPage
+                              ? "bg-orange-500 text-white"
+                              : pageNum === "..."
+                              ? "cursor-default text-gray-400"
+                              : "text-gray-600 hover:bg-gray-100 border border-gray-300"
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      ))}
+
+                      <button
+                        onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                        disabled={currentPage === totalPages}
+                        className="p-2 rounded-md text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <IoChevronForward className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    {categorySelected?.enlaceDestacado && (
+                      <a
+                        href={categorySelected.enlaceDestacado}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-6 inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg font-semibold shadow-lg hover:from-red-700 hover:to-red-800 transition-all duration-200 hover:shadow-xl transform hover:scale-105"
+                      >
+                        <span>Ver más productos de {categorySelected.nombre}</span>
+                        <IoChevronForward className="w-4 h-4" />
+                      </a>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

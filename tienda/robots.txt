@@ -1,0 +1,13 @@
+User-agent: *
+
+Disallow: /carrito
+Disallow: /perfil
+Disallow: /pedidos
+Disallow: /cancelar
+Disallow: /favorito
+
+
+Allow: /
+
+
+Sitemap: https://compucosta.com/sitemap.xml

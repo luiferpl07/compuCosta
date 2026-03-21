@@ -11,17 +11,16 @@ const ProductDescription: React.FC<ProductDescriptionProps> = ({ product }) => {
 
   if (!product) return null;
 
-  // Split description text into bullet points if available
-  // If no description is available, use default features
+  // Dividir el texto de descripción en párrafos si está disponible
   const descriptionItems = product.descripcion
     ? product.descripcion.split('\n').filter(item => item.trim() !== '')
     : [];
   
-  // Show first 4 items, or less if there are fewer items
-  const initialItems = descriptionItems.slice(0, Math.min(4, descriptionItems.length));
-  const additionalItems = descriptionItems.slice(4);
+  // Mostrar los primeros 3 párrafos, o menos si hay menos elementos
+  const initialItems = descriptionItems.slice(0, Math.min(3, descriptionItems.length));
+  const additionalItems = descriptionItems.slice(3);
   
-  // Only show "Ver más" button if there are additional items
+  // Solo mostrar el botón "Ver más" si hay elementos adicionales
   const hasAdditionalItems = additionalItems.length > 0;
 
   return (
@@ -31,19 +30,13 @@ const ProductDescription: React.FC<ProductDescriptionProps> = ({ product }) => {
       {descriptionItems.length > 0 ? (
         <div className="space-y-3">
           {initialItems.map((item, index) => (
-            <div key={index} className="flex gap-2">
-              <span className="font-medium text-gray-700 flex-shrink-0">{index + 1}.</span>
-              <p className="text-gray-600">{item}</p>
-            </div>
+            <p key={index} className="text-gray-600 leading-relaxed">{item}</p>
           ))}
           
           {expanded && additionalItems.length > 0 && (
             <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
               {additionalItems.map((item, index) => (
-                <div key={index} className="flex gap-2">
-                  <span className="font-medium text-gray-700 flex-shrink-0">{initialItems.length + index + 1}.</span>
-                  <p className="text-gray-600">{item}</p>
-                </div>
+                <p key={index} className="text-gray-600 leading-relaxed">{item}</p>
               ))}
             </div>
           )}

@@ -19,6 +19,9 @@ import otrosServicios from "./servicios/otrosServicios.jpg"
 import cableado from "./servicios/cablaeado.jpg"
 import sede1 from "./sede1.jpg";
 import sede2 from "./sede2.jpg";
+import servicio from "./servicios.jpeg"
+import contacto from "./contacto.jpeg"
+import acerca_de from "./acerca_de.jpeg"
 
 export {
   logo,
@@ -43,4 +46,7 @@ export {
   reparacionTv,
   otrosServicios,
   cableado,
+  servicio, 
+  contacto,
+  acerca_de
 };

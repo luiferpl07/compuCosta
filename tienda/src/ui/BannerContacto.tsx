@@ -63,7 +63,11 @@ const BannerContacto = () => {
       {banner?.imageUrl ? (
         <>
           <img
-            src={`${config?.baseUrl}${banner.imageUrl}`}
+            src={
+              banner.imageUrl.startsWith("http")
+                ? banner.imageUrl
+                : `${config?.baseUrl}${banner.imageUrl}`
+            }
             alt={banner.title || "Banner de contacto"}
             className="absolute inset-0 w-full h-full object-contain"
             onError={(e) => {

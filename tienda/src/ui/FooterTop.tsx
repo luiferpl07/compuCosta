@@ -11,7 +11,7 @@ const FooterTop = () => {
       name: "Envíos a toda Colombia",
       icon: <FcShipped className="mx-auto h-12 w-12 text-textoAmarillo" />,
       description: "Tus envíos van asegurados y llegan rápidamente.",
-      link: "/envios", // Ruta a la que redirige
+      //link: "/envios", // Ruta a la que redirige
     },
     {
       name: "Nuestras tiendas",

@@ -21,12 +21,12 @@ const DiscountedBanner = () => {
   const [loading, setLoading] = useState(false);
 
   const popularSearchItems = [
-    { title: "Smart Watches", link: "smartWatches" },
-    { title: "Audífonos", link: "headphones" },
-    { title: "Cámaras", link: "camerasAndPhotos" },
-    { title: "Audio", link: "tvAndAudio" },
-    { title: "Laptops & Computadores", link: "computersAndLaptop" },
-    { title: "Celulares", link: "cellPhones" },
+    { title: "Impresoras", link: "productos?categoria=equipos-impresion" },
+    { title: "Red", link: "productos?categoria=equipos-red" },
+    { title: "Accesorios de video", link: "productos?categoria=equipos-y-accesorios-video" },
+    { title: "Audio", link: "productos?categoria=equipos-y-accesorios-audio" },
+    { title: "Laptops & Computadores", link: "productos?categoria=equipos-de-computo" },
+    { title: "Almacenamiento", link: "productos?categoria=dipositivos-almacenamiento" },
   ];
 
   useEffect(() => {
@@ -36,7 +36,7 @@ const DiscountedBanner = () => {
         const bannersEndpoint = `${config?.baseUrl}${config?.apiPrefix}/banners`;
         const bannersData = await getData(bannersEndpoint);
         const activeBanners = bannersData.filter(
-          (b: Banner) => b.isActive && b.bannerType === "banner2"
+          (b: Banner) => b.isActive && b.bannerType === "bannerSegundario"
         );
         setBanners(activeBanners);
       } catch (error) {
@@ -60,7 +60,7 @@ const DiscountedBanner = () => {
           {popularSearchItems.map(({ title, link }) => (
             <Link
               key={title}
-              to={`/categorias/${link}`}
+              to={`/${link}`}
               className="border border-gray-300 px-6 md:px-8 py-2 md:py-3 rounded-full capitalize font-medium
                 hover:bg-black hover:text-white transition-all duration-200"
             >
@@ -90,7 +90,11 @@ const DiscountedBanner = () => {
               {banners.map((banner) => (
                 <div key={banner.id} className="relative w-full h-[200px] md:h-[300px]">
                   <img
-                    src={`${config?.baseUrl}${banner.imageUrl}`}
+                    src={
+                      banner.imageUrl.startsWith("http")
+                        ? banner.imageUrl
+                        : `${config.baseUrl}${banner.imageUrl}`
+                    }
                     alt={banner.title}
                     className="absolute inset-0 w-full h-full object-contain"
                   />

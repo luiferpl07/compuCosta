@@ -1,157 +1,191 @@
-"use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, RefObject } from "react";
 import { config } from "../../config";
-import { getData } from "../lib";
 import { Product } from "../../type";
 import ProductCard from "./ProductCard";
-import ReactPaginate from "react-paginate";
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { getData } from "../lib";
+import { FaSpinner } from "react-icons/fa";
+import { IoChevronBack, IoChevronForward } from "react-icons/io5";
 
-interface ItemsProps {
-  currentItems: Product[];
+const ITEMS_PER_PAGE = 8; // 8 productos por página
+
+interface PaginationProps {
+  scrollTargetRef?: RefObject<HTMLDivElement>;
 }
 
-const Items = ({ currentItems }: ItemsProps) => {
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5">
-      {currentItems &&
-        currentItems?.map((item: Product) => (
-          <ProductCard key={item?.idproducto} item={item} />
-        ))}
-    </div>
-  );
-};
-
-const Pagination = () => {
+const Pagination = ({ scrollTargetRef }: PaginationProps) => {
   const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const totalPages = Math.ceil(products.length / ITEMS_PER_PAGE);
+
+  const getCurrentPageProducts = () => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    return products.slice(startIndex, endIndex);
+  };
+
+  const getPageNumbers = () => {
+    const pageNumbers = [];
+    const maxVisiblePages = 5;
+    
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pageNumbers.push(i);
+      }
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 4; i++) {
+          pageNumbers.push(i);
+        }
+        pageNumbers.push('...');
+        pageNumbers.push(totalPages);
+      } else if (currentPage >= totalPages - 2) {
+        pageNumbers.push(1);
+        pageNumbers.push('...');
+        for (let i = totalPages - 3; i <= totalPages; i++) {
+          pageNumbers.push(i);
+        }
+      } else {
+        pageNumbers.push(1);
+        pageNumbers.push('...');
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+          pageNumbers.push(i);
+        }
+        pageNumbers.push('...');
+        pageNumbers.push(totalPages);
+      }
+    }
+    
+    return pageNumbers;
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      const endpoint = `${config?.baseUrl}${config?.apiPrefix}/products`;
+    const fetchProducts = async () => {
       try {
         setLoading(true);
-        const data = await getData(endpoint);
-        setProducts(data);
-        setError(null);
+
+        // Fetch paginated until we have all active products
+        let allProductsData: Product[] = [];
+        let cursor: number | null = null;
+          
+        do {
+          const url = `${config?.baseUrl}${config?.apiPrefix}/products?limit=100${cursor ? `&cursor=${cursor}` : ""}`;
+          const res = await getData(url);
+          const page: Product[] = res?.productos || [];
+          allProductsData = [...allProductsData, ...page];
+          cursor = res?.nextCursor ?? null;
+        } while (cursor !== null);
+        
+        const productosActivos = allProductsData.filter((product: Product) => {
+          const tieneStock = (product.cantidad || 0) > 0;
+          const estaActivo = product.activo === true;
+          return estaActivo && tieneStock;
+        });
+        
+        console.log('✅ Pagination productos CON stock:', productosActivos.length);
+        
+        // Formatear los productos (las reviews no se traen todas de golpe por rendimiento)
+        const enhancedProducts = productosActivos.map((product: Product) => {
+          return {
+            ...product,
+            enStock: true,
+            reseñasCount: product.reseñasCount || 0,
+            puntuacionPromedio: product.puntuacionPromedio || 0,
+            marca: product.marca || "Sin marca",
+            categorias: product.categorias || "Sin categoría",
+            imagenes: product.imagenes || [{ url: `/images/products/${product.slug}.jpg` }]
+          };
+        });
+        
+        const sortedProducts = enhancedProducts.sort((a: Product, b: Product) => 
+          (b.puntuacionPromedio || 0) - (a.puntuacionPromedio || 0)
+        );
+        
+        setProducts(sortedProducts);
       } catch (error) {
-        console.error("Error fetching data", error);
-        setError("Error al cargar los productos. Por favor, intente nuevamente.");
+        console.error("❌ Pagination error al cargar productos:", error);
       } finally {
         setLoading(false);
       }
     };
-    fetchData();
+
+    fetchProducts();
   }, []);
 
-  const itemsPerPage = 15;
-  const [itemOffset, setItemOffset] = useState(0);
-  const [currentPage, setCurrentPage] = useState(0);
-
-  const endOffset = itemOffset + itemsPerPage;
-  const currentItems = products.slice(itemOffset, endOffset);
-  const pageCount = Math.ceil(products.length / itemsPerPage);
-
-  const handlePageClick = (event: { selected: number }) => {
-    const newOffset = (event.selected * itemsPerPage) % products.length;
-    setItemOffset(newOffset);
-    setCurrentPage(event.selected);
-    
-    // Scroll a la sección de productos
-    const productSection = document.querySelector('.container');
-    if (productSection) {
-      productSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  useEffect(() => {
+    if (currentPage > 1 && scrollTargetRef?.current) {
+      const element = scrollTargetRef.current;
+      const offsetTop = element.getBoundingClientRect().top + window.pageYOffset - 100;
+      window.scrollTo({ top: offsetTop, behavior: 'smooth' });
     }
-  };
+  }, [currentPage, scrollTargetRef]);
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-[200px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="text-center text-red-600 py-8">
-        <p>{error}</p>
-        <button 
-          onClick={() => window.location.reload()}
-          className="mt-4 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-        >
-          Reintentar
-        </button>
+      <div className="flex items-center justify-center py-20">
+        <FaSpinner className="animate-spin text-4xl text-textoRojo" />
       </div>
     );
   }
 
   if (products.length === 0) {
     return (
-      <div className="text-center text-gray-600 py-8">
-        <p>No hay productos disponibles.</p>
+      <div className="text-center py-10">
+        <p className="text-gray-500">No hay productos disponibles en este momento.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      <Items currentItems={currentItems} />
-      
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-t border-gray-200 pt-6">
-        {/* Información de productos */}
-        <p className="text-sm text-gray-600 order-2 md:order-1">
-          Mostrando productos {itemOffset + 1} al {Math.min(endOffset, products.length)}{" "}
-          de {products.length} totales
-        </p>
+    <div>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 mb-10">
+        {getCurrentPageProducts().map((item: Product) => (
+          <ProductCard key={item?.idproducto} item={item} />
+        ))}
+      </div>
 
-        {/* Paginación */}
-        <div className="order-1 md:order-2">
-          <ReactPaginate
-            breakLabel="..."
-            nextLabel={<ChevronRight className="w-4 h-4" />}
-            previousLabel={<ChevronLeft className="w-4 h-4" />}
-            onPageChange={handlePageClick}
-            pageRangeDisplayed={3}
-            marginPagesDisplayed={2}
-            pageCount={pageCount}
-            renderOnZeroPageCount={null}
-            className="flex items-center gap-2"
-            pageClassName="page-item"
-            pageLinkClassName="w-10 h-10 flex items-center justify-center rounded-md border border-gray-300 hover:bg-gray-50 transition-colors"
-            previousClassName="page-item"
-            previousLinkClassName="w-10 h-10 flex items-center justify-center rounded-md border border-gray-300 hover:bg-gray-50 transition-colors"
-            nextClassName="page-item"
-            nextLinkClassName="w-10 h-10 flex items-center justify-center rounded-md border border-gray-300 hover:bg-gray-50 transition-colors"
-            breakClassName="page-item"
-            breakLinkClassName="w-10 h-10 flex items-center justify-center"
-            containerClassName="flex items-center gap-2"
-            activeClassName="!bg-red-600 !text-white !border-red-600 hover:!text-black"
-            disabledClassName="opacity-50 cursor-not-allowed"
-            disabledLinkClassName="cursor-not-allowed"
-          />
-        </div>
-
-        {/* Navegación rápida */}
-        <div className="flex items-center gap-2 order-3">
+      {totalPages > 1 && (
+        <div className="flex justify-center items-center gap-2 mt-8 mb-4">
           <button
-            onClick={() => handlePageClick({ selected: 0 })}
-            disabled={currentPage === 0}
-            className="w-8 h-8 flex items-center justify-center rounded-md border border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Primera página"
+            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+            className="p-2 rounded-md text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            aria-label="Página anterior"
           >
-            <ChevronsLeft className="w-4 h-4" />
+            <IoChevronBack className="w-5 h-5" />
           </button>
+
+          {getPageNumbers().map((pageNum, index) => (
+            <button
+              key={index}
+              onClick={() => typeof pageNum === "number" && setCurrentPage(pageNum)}
+              disabled={pageNum === "..."}
+              className={`px-4 py-2 text-sm rounded-md transition-colors ${
+                pageNum === currentPage
+                  ? "bg-orange-500 text-white font-semibold"
+                  : pageNum === "..."
+                  ? "cursor-default text-gray-400"
+                  : "text-gray-600 hover:bg-gray-100 border border-gray-300"
+              }`}
+            >
+              {pageNum}
+            </button>
+          ))}
+
           <button
-            onClick={() => handlePageClick({ selected: pageCount - 1 })}
-            disabled={currentPage === pageCount - 1}
-            className="w-8 h-8 flex items-center justify-center rounded-md border border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Última página"
+            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+            disabled={currentPage === totalPages}
+            className="p-2 rounded-md text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            aria-label="Página siguiente"
           >
-            <ChevronsRight className="w-4 h-4" />
+            <IoChevronForward className="w-5 h-5" />
           </button>
         </div>
+      )}
+
+      <div className="text-center text-sm text-gray-600 mt-4">
+        Mostrando {(currentPage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, products.length)} de {products.length} productos
       </div>
     </div>
   );

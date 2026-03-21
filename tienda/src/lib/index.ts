@@ -1,6 +1,5 @@
 export const getData = async (endpoint: string) => {
   try {
-    console.log('Fetching from endpoint:', endpoint);
     const response = await fetch(endpoint, {
       method: 'GET',
       headers: {
@@ -13,7 +12,6 @@ export const getData = async (endpoint: string) => {
     }
 
     const data = await response.json();
-    console.log('Response data:', data);
     return data;
   } catch (error) {
     console.error('Error en getData:', error);

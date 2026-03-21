@@ -1,22 +1,35 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import strip from '@rollup/plugin-strip';
+
+const isProd = process.env.NODE_ENV === 'production';
 
 export default defineConfig({
-  plugins: [react()],
+  base: "/",
+  plugins: [
+    react(),
+    isProd &&
+      strip({
+        include: ['**/*.ts', '**/*.tsx'],
+        functions: ['console.log', 'console.warn', 'console.error', 'console.debug'],
+        debugger: true
+      })
+  ],
   esbuild: {
-    logLevel: 'silent' // Ignora errores en la build
+    logLevel: 'silent'
   },
   build: {
-    minify: false,  // Evita que minificación cause errores
-    sourcemap: false // Desactiva sourcemaps si están generando warnings
-  },
-  server: {
-    proxy: {
-      "/socket.io": {
-        target: "http://localhost:3000",
-        ws: true, // 🔹 Habilitar WebSockets
-        changeOrigin: true,
-      },
+    minify: true,
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom'],
+          firebase: ['firebase/app', 'firebase/auth'],
+          vendor: ['axios', 'socket.io-client']
+        }
+      }
     },
-  },
-})
+    chunkSizeWarningLimit: 1000
+  }
+});

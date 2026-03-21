@@ -1,13 +1,14 @@
 import { getDoc, doc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { UserType } from "../../type";
+import { config } from "../../config";
 
 export const getUserData = async (uid: string): Promise<UserType | null> => {
   try {
     const userDoc = await getDoc(doc(db, "users", uid));
 
     if (!userDoc.exists()) {
-      console.warn(`❌ Usuario ${uid} no encontrado en Firestore`);
+      console.warn("❌ Usuario no encontrado en Firestore");
       return null; // No devolver error, solo null
     }
 
@@ -21,7 +22,7 @@ export const getUserData = async (uid: string): Promise<UserType | null> => {
 
 export async function saveUserData(userData: any) {
     try {
-      const res = await fetch("/api/users", {
+      const res = await fetch(`${config.baseUrl}${config.apiPrefix}/users`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(userData),

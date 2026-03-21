@@ -14,7 +14,7 @@ const HomeBanner = () => {
       const endpoint = `${config?.baseUrl}${config?.apiPrefix}/banners`;
       try {
         const data: BannerProps[] = await getData(endpoint);
-        const activeBanner1s = data.filter(b => b.isActive && b.bannerType === 'banner1');
+        const activeBanner1s = data.filter(b => b.isActive && b.bannerType === 'bannerPrincipal');
         if (activeBanner1s.length > 0) {
           setBanners(activeBanner1s);
         } else {
@@ -78,8 +78,12 @@ const HomeBanner = () => {
       <div className="relative w-full h-full transition-opacity duration-500">
         {currentBanner?.imageUrl ? (
           <>
-            <img
-              src={`${config?.baseUrl}${currentBanner.imageUrl}`}
+           <img
+              src={
+                currentBanner.imageUrl.startsWith("http")
+                  ? currentBanner.imageUrl
+                  : `${config.baseUrl}${currentBanner.imageUrl}`
+              }
               alt={`Imagen del banner ${currentBanner.title || ""}`}
               className="absolute inset-0 w-full h-full object-contain"
               onError={(e) => {

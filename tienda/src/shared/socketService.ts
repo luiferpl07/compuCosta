@@ -1,5 +1,17 @@
-import { Socket } from "socket.io-client";
+import { io, Socket } from "socket.io-client";
+import { SOCKET_URL } from "./socketConfig";
+import { config } from "../../config"; // Asegúrate de que la ruta es correcta
 
+// 🔌 Crear socket conectado al servidor
+export const createSocket = (): Socket => {
+  return io(SOCKET_URL, {
+    path: "/socket.io/",
+    transports: ["websocket"],
+    withCredentials: true,
+  });
+};
+
+// 🎯 Eventos que usaremos
 export const EVENTS = {
   JOIN_CHAT: "join-chat",
   JOIN_ADMIN: "join-admin",
@@ -8,34 +20,58 @@ export const EVENTS = {
   NEW_MESSAGE: "new-message",
 };
 
-export const emitClientMessage = (socket: Socket, idChat: string, texto: string, nombreUsuario: string) => {
-  // Verificar si el socket está conectado
-  if (!socket || !socket.connected) {
-    console.error("Socket no conectado. No se puede enviar mensaje.");
-    return Promise.reject(new Error("Socket no conectado"));
-  }
+// 📤 Emitir mensaje de cliente y guardarlo
+export const emitClientMessage = async (
+  socket: Socket,
+  idChat: string,
+  texto: string,
+  nombreUsuario: string
+): Promise<any> => {
+  try {
+    const response = await fetch(`${config.baseUrl}${config.apiPrefix}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idChat,
+        texto,
+        nombreUsuario,
+      }),
+    });
 
-  const messageData = {
-    idChat,
-    texto,
-    nombreUsuario,
-    creado: new Date(),
-    esAdmin: false,
-  };
-  
-  console.log("Emitiendo mensaje de cliente:", messageData);
-  socket.emit(EVENTS.CLIENT_MESSAGE, messageData);
-  
-  // Devolver Promise inmediatamente sin esperar confirmación
-  // Esto evita bloqueos en la UI mientras se espera respuesta
-  return Promise.resolve(messageData);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'No se pudo guardar el mensaje');
+    }
+
+    const savedMessage = await response.json();
+
+    // Emitir mensaje por socket
+    if (socket && socket.connected) {
+      socket.emit(EVENTS.CLIENT_MESSAGE, {
+        idChat,
+        texto: savedMessage.mensaje.texto,
+        nombreUsuario,
+        creado: savedMessage.mensaje.creado,
+        esAdmin: false,
+      });
+    }
+
+    return savedMessage.mensaje; // ✅ CORREGIDO
+
+  } catch (error) {
+    console.error("❌ Error al guardar/enviar mensaje:", error);
+    throw error;
+  }
 };
 
-// Emitir mensaje del administrador
-export const emitAdminMessage = (socket: Socket, idChat: string, texto: string) => {
-  // Verificar si el socket está conectado
+// 📤 Emitir mensaje del admin (sin cambios)
+export const emitAdminMessage = (
+  socket: Socket,
+  idChat: string,
+  texto: string
+): Promise<any> => {
   if (!socket || !socket.connected) {
-    console.error("Socket no conectado. No se puede enviar mensaje de administrador.");
+    console.error("❌ Socket no conectado.");
     return Promise.reject(new Error("Socket no conectado"));
   }
 
@@ -45,75 +81,66 @@ export const emitAdminMessage = (socket: Socket, idChat: string, texto: string) 
     creado: new Date(),
     esAdmin: true,
   };
-  
-  console.log("Emitiendo mensaje de administrador:", messageData);
+
+  console.log("📤 Admin envía mensaje:", messageData);
   socket.emit(EVENTS.ADMIN_MESSAGE, messageData);
-  
-  // Devolver Promise inmediatamente sin esperar confirmación
+
   return Promise.resolve(messageData);
 };
 
-// Configurar escucha de mensajes
-export const setupMessageListener = (socket: Socket, callback: (data: any) => void) => {
-  // Remover listener anterior si existe para evitar duplicados
-  socket.off(EVENTS.NEW_MESSAGE); 
-  
-  // Añadir nuevo listener
+// 📥 Escuchar nuevos mensajes
+export const setupMessageListener = (
+  socket: Socket,
+  callback: (data: any) => void
+) => {
+  socket.off(EVENTS.NEW_MESSAGE); // evitar duplicados
   socket.on(EVENTS.NEW_MESSAGE, (data) => {
-    console.log("📩 Mensaje recibido en listener:", data);
+    console.log("📩 Mensaje recibido:", data);
     callback(data);
   });
-  
-  // Devolver una función para limpiar el listener
-  return () => {
-    socket.off(EVENTS.NEW_MESSAGE);
-  };
+
+  return () => socket.off(EVENTS.NEW_MESSAGE);
 };
 
-// Verificar estado de conexión del socket
+// ✅ Verificar estado de conexión
 export const isSocketConnected = (socket: Socket | null): boolean => {
   return !!socket && socket.connected;
 };
 
-// Función de reconexión
+// 🔁 Intentar reconectar
 export const reconnectSocket = (socket: Socket | null): Promise<Socket> => {
   return new Promise((resolve, reject) => {
     if (!socket) {
       reject(new Error("No hay socket para reconectar"));
       return;
     }
-    
-    // Si ya está conectado, resolver inmediatamente
+
     if (socket.connected) {
       resolve(socket);
       return;
     }
-    
-    // Establecer listeners antes de intentar la reconexión
+
     const onConnect = () => {
-      console.log("Socket reconectado exitosamente");
-      socket.off('connect', onConnect);
-      socket.off('connect_error', onError);
+      console.log("✅ Socket reconectado");
+      socket.off("connect", onConnect);
+      socket.off("connect_error", onError);
       clearTimeout(timeoutId);
       resolve(socket);
     };
-    
+
     const onError = (error: any) => {
-      console.error("Error al reconectar:", error);
+      console.error("❌ Error al reconectar:", error);
     };
-    
-    socket.once('connect', onConnect);
-    socket.on('connect_error', onError);
-    
-    // Intentar reconexión
+
+    socket.once("connect", onConnect);
+    socket.on("connect_error", onError);
     socket.connect();
-    
-    // Timeout para la reconexión
+
     const timeoutId = setTimeout(() => {
-      socket.off('connect', onConnect);
-      socket.off('connect_error', onError);
+      socket.off("connect", onConnect);
+      socket.off("connect_error", onError);
       if (!socket.connected) {
-        reject(new Error("Timeout en reconexión de socket"));
+        reject(new Error("⏱ Timeout reconexión socket"));
       }
     }, 5000);
   });

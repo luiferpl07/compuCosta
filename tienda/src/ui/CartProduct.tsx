@@ -6,10 +6,9 @@ import { IoClose } from "react-icons/io5";
 import { store } from "../lib/store";
 import toast from "react-hot-toast";
 import { FaCheck } from "react-icons/fa";
-import { MdStar, MdStarHalf, MdOutlineStarOutline } from "react-icons/md"; // Importa los iconos correctos
+import { MdStar, MdStarHalf, MdOutlineStarOutline } from "react-icons/md";
 import { getProductImage, getProductImageAlt } from "../../utils/imageUtils";
 import PriceTag from "./PriceTag";
-
 
 const CartProduct = ({ product }: { product: Product }) => {
   const { removeFromCart } = store();
@@ -27,6 +26,76 @@ const CartProduct = ({ product }: { product: Product }) => {
 
   const mainImage = getProductImage(product?.imagenes);
   const fallbackImageAlt = getProductImageAlt(product?.imagenes, product?.nombreproducto);
+
+  // ✅ ACTUALIZADO: Lógica automática - activar Lista2 si hay descuento real
+  const isLista2Active = product?.lista2_activa === true;
+  const hasLista2Price = product?.lista2 && product.lista2 > 0;
+  const showLista2 = isLista2Active && product?.lista2 && product.lista2 > 0;
+
+  // Función para obtener SOLO la categoría más específica (subcategoría)
+  const getCategoriesDisplay = (categorias: any) => {
+    if (typeof categorias === "string") {
+      if (categorias.includes(",")) {
+        const categoriasArray = categorias.split(",").map(cat => cat.trim());
+        return categoriasArray[categoriasArray.length - 1];
+      }
+      return categorias;
+    }
+
+    if (!Array.isArray(categorias) || categorias.length === 0) {
+      return "Sin categoría";
+    }
+
+    const categoriasNormalizadas = categorias.map(item => {
+      if (item.categoria) {
+        return item.categoria;
+      } else if (item.nombre) {
+        return item;
+      }
+      return item;
+    });
+
+    const subcategorias = [];
+    const categoriasPadre = [];
+
+    for (const cat of categoriasNormalizadas) {
+      if (cat.padre_id && cat.padre_id !== null) {
+        subcategorias.push(cat);
+      } else {
+        categoriasPadre.push(cat);
+      }
+    }
+
+    if (subcategorias.length > 0) {
+      return subcategorias.map(cat => cat.nombre).join(", ");
+    }
+
+    if (categoriasPadre.length > 0) {
+      return categoriasPadre.map(cat => cat.nombre).join(", ");
+    }
+
+    return "Sin categoría";
+  };
+
+  const getMarcaDisplay = (marca: any) => {
+    if (typeof marca === "string") {
+      return marca;
+    }
+
+    if (Array.isArray(marca) && marca.length > 0) {
+      if (marca[0]?.marca?.nombre) {
+        return marca[0].marca.nombre;
+      }
+      if (typeof marca[0] === "string") {
+        return marca[0];
+      }
+      if (marca[0]?.nombre) {
+        return marca[0].nombre;
+      }
+    }
+
+    return "Sin marca";
+  };
 
   return (
     <div className="flex py-6 sm:py-10">
@@ -66,19 +135,48 @@ const CartProduct = ({ product }: { product: Product }) => {
               </span>
             </div>
             <p>Marca: <span className="font-medium">
-              {typeof product?.marca === "string" && product.marca !== null
-                ? product.marca
-                : "Sin marca"}
+              {getMarcaDisplay(product?.marca)}
             </span></p>
             <p>Categoría: <span className="font-medium">
-              {typeof product?.categorias === "string" && product.categorias !== null
-                ? product.categorias
-                : "Sin categoría"}
+              {getCategoriesDisplay(product?.categorias)}
             </span></p>
-            <div className="flex items-center gap-6 mt-2">
-              <p className="text-base font-semibold">
-                <PriceTag precio={product.lista2} precioDescuento={product.lista1} className="text-lg" />
-              </p>
+            
+            {/* ✅ PRECIOS LIMPIOS: Sin ofertas, ahorros ni debug */}
+            <div className="flex flex-col gap-2 mt-2">              
+              <div className="text-base font-semibold">
+                {showLista2 && product.lista2 > product.lista1 ? (
+                  // Solo mostrar precio con descuento cuando hay descuento real
+                  <span className="text-lg font-bold text-red-600">
+                    <FormatoPrecio amount={product.lista1 * (product.cantidad || 1)} />
+                  </span>
+                ) : (
+                  // Mostrar solo el precio normal cuando no hay descuento
+                  <span className="text-lg font-bold text-red-600">
+                    <FormatoPrecio amount={product.lista1 * (product.cantidad || 1)} />
+                  </span>
+                )}
+              </div>
+              
+              {/* ✅ PRECIO UNITARIO: Solo cuando hay descuento */}
+              <div className="text-sm text-gray-600">
+                Precio unitario:
+                {product?.lista2_activa === true && product.lista2 ? (
+                  <>
+                    <span className="line-through text-gray-500 ml-1">
+                      <FormatoPrecio amount={product.lista2} />
+                    </span>
+                    {' '}
+                    <span className="font-semibold text-gray-900">
+                      <FormatoPrecio amount={product.lista1} />
+                    </span>
+                  </>
+                ) : (
+                  <span className="font-semibold text-gray-900 ml-1">
+                    <FormatoPrecio amount={product.lista1} />
+                  </span>
+                )}
+              </div>
+              
               <AddToCartBtn product={product} showPrice={false} />
             </div>
           </div>
@@ -97,11 +195,6 @@ const CartProduct = ({ product }: { product: Product }) => {
             <p className="mt-4 flex space-x-2 text-sm text-gray-700">
               <FaCheck className="text-lg text-green-500" />
               <span>En Stock</span>
-            </p>
-          )}
-          {product?.lista2 && (
-            <p className="text-sm text-green-600">
-              Ahorras <FormatoPrecio amount={product.lista2 - product.lista1} />
             </p>
           )}
         </div>

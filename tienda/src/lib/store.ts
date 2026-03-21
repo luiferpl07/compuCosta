@@ -70,7 +70,7 @@ export const store = create<StoreType>()(
             set({ currentUser: docSnap.data() as UserType, isLoading: false });
           }
         } catch (error) {
-          console.log("getUserInfo error", error);
+          console.error("getUserInfo error", error);
           set({ currentUser: null, isLoading: false });
         }
       },

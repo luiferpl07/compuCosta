@@ -10,80 +10,87 @@ export interface HighlightsType {
 
 export interface CategoryProps {
   id: number;
-  imagen: string;
   nombre: string;
+  descripcion?: string;
   slug: string;
-  descripcion: string;
+  imagen?: string;
   enlaceDestacado?: string;
+  padre_id?: number | null;
+  activo: boolean;
+  subcategorias?: CategoryProps[];
 }
 
-export interface Product {
-  idproducto: string; // ID único del producto
-  nombreproducto: string; // Nombre del producto
-  lista1: number; 
-  porciva:     string;  // Porcentaje IVA
-  ivaincluido:    string// Precio del producto
-  descripcion?: string; // Descripción larga (opcional)
-  caracteristica?: string; // Descripción corta (opcional)
-  slug: string; // Slug único
-  destacado: boolean; // Si el producto es destacado
-  cantidad: number; // Cantidad disponible
-  vistaGeneral?: string; // Resumen general del producto (opcional)
-  enStock: boolean; // Indica si el producto está en stock
-  esNuevo: boolean; // Indica si el producto es nuevo
-  lista2: number; // Precio con descuento (opcional)
-  puntuacionPromedio: number; // Puntuación promedio basada en las reseñas
-  reseñasCount: number; // Número total de reseñas
-  created_at: Date; // Fecha de creación
-  updated_at: Date; // Fecha de última actualización
+export interface ProductCategory {
+  id: number;
+  categoria: CategoryProps;
+}
 
-  // Relación con categorías
-  categorias: {
-    id: number;
-    nombre: string;
-    descripcion?: string;
-    slug: string;
-    imagen?: string;
-    enlaceDestacado?: string;
-    
-  }[];
+export interface ProductColor {
+  id: number;
+  nombre: string;
+  codigoHex: string;
+}
 
-  // Relación con colores
-  colores: {
-    id: number;
-    nombre: string;
-    codigoHex: string;
-  }[];
-
-  // Relación con marcas
+export interface ProductBrand {
+  id: number;
   marca: {
     id: number;
     nombre: string;
     imagen?: string;
   };
-
-  // Relación con imágenes
-  imagenes: {
-    id: number;
-    url: string;
-    alt_text?: string; // Texto alternativo (opcional)
-    orden: number; // Orden de las imágenes
-    es_principal: boolean; // Indica si es la imagen principal
-    created_at: Date; // Fecha de creación de la imagen
-  }[];
-
-  // Relación con reseñas
-  reviews: {
-    id: number;
-    id_producto: number;
-    nombre_cliente: string; // Nombre del cliente que dejó la reseña
-    calificacion: number; // Calificación del producto (1-5)
-    comentario?: string; // Comentario del cliente (opcional)
-    fecha_review: Date; // Fecha de la reseña
-    aprobado: boolean; // Indica si la reseña está aprobada
-  }[];
 }
 
+export interface ProductImage {
+  id: number;
+  url: string;
+  alt_text?: string;
+  orden: number;
+  es_principal: boolean;
+  created_at: Date;
+}
+
+export interface ProductReview {
+  id: number;
+  id_producto: number;
+  nombre_cliente: string;
+  calificacion: number;
+  comentario?: string;
+  fecha_review: Date;
+  aprobado: boolean;
+}
+
+export interface Product {
+  idproducto: string;
+  nombreproducto: string;
+  lista1: number;
+  porciva: string;
+  ivaincluido: string;
+  descripcion?: string;
+  caracteristica?: string;
+  slug: string;
+  destacado: boolean;
+  cantidad: number;
+  vistaGeneral?: string;
+  enStock: boolean;
+  esNuevo: boolean;
+  lista2: number;
+  lista2_activa: boolean;
+  puntuacionPromedio: number;
+  reseñasCount: number;
+  created_at: Date;
+  updated_at: Date;
+  activo?: boolean;          
+  activo_manual?: boolean | null;
+  shopify_product_id?: string;
+  shopify_variant_id?: string;
+
+  // Relaciones corregidas
+  categorias: ProductCategory[];
+  colores: ProductColor[];
+  marca: ProductBrand[];
+  imagenes: ProductImage[];
+  reviews: ProductReview[];
+}
 
 
 export interface OrderTypes {

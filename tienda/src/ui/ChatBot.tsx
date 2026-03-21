@@ -1,621 +1,991 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, Bot, User, MessageCircle, Bell, X, Phone } from 'lucide-react';
-import { config } from "../../config";
-import { io, Socket } from 'socket.io-client';
-import { EVENTS, setupMessageListener } from "../shared/socketService";
+import React, { useState, useEffect, useRef } from 'react';
+import { MessageCircle, Send, X, Minimize2, Maximize2, User, Bell, BellOff } from 'lucide-react';
+import { config } from '../../config';
+import { useAuth } from '../context/AuthContext';
+import {
+  createSocket,
+  emitClientMessage,
+  setupMessageListener,
+  EVENTS,
+  isSocketConnected,
+} from "../shared/socketService";
+
+import { Socket } from "socket.io-client";
 
 interface Message {
+  id: string;
   texto: string;
   esAdmin: boolean;
   creado: Date;
-  leido?: boolean;
+  isWelcome?: boolean;
 }
 
-interface UserInfo {
-  nombre: string;
-  telefono: string;
+interface ChatData {
+  chatId: string;
+  messages: Message[];
+  lastActivity: number;
+  hasSeenWelcome: boolean;
+  unreadCount: number;
+  anonymousUser?: {
+    id: string;
+    name: string;
+  } | null;
 }
 
-function ChatBot() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputText, setInputText] = useState('');
+interface ChatBotProps {
+  className?: string;
+}
+
+const CHAT_EXPIRY_HOURS = 12;
+
+const ChatBot: React.FC<ChatBotProps> = ({ className = '' }) => {
+  // Estados principales
   const [isOpen, setIsOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [userInfo, setUserInfo] = useState<UserInfo>({ nombre: '', telefono: '' });
-  const [formStep, setFormStep] = useState<'nombre' | 'telefono' | 'chat'>('nombre');
-  const [idChat, setIdChat] = useState<string | null>(null);
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [chatId, setChatId] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [reconnectAttempts, setReconnectAttempts] = useState(0);
-  const [inputDisabled, setInputDisabled] = useState(false);
+  const [hasNewMessage, setHasNewMessage] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [adminTyping, setAdminTyping] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [hasSeenWelcome, setHasSeenWelcome] = useState(false);
+  
+  // ✨ Estados para el formulario de nombre
+  const [showNameForm, setShowNameForm] = useState(false);
+  const [tempUserName, setTempUserName] = useState('');
+  const [isSubmittingName, setIsSubmittingName] = useState(false);
+  
+  // ✨ Estado para usuario anónimo
+  const [anonymousUser, setAnonymousUser] = useState<{id: string, name: string} | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false); // ✨ Nuevo estado para controlar inicialización
+
   const socketRef = useRef<Socket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const reconnectInterval = useRef<NodeJS.Timeout | null>(null);
-  const cleanupListenerRef = useRef<(() => void) | null>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { currentUser } = useAuth();
 
-  // Handler para mensajes nuevos
-  const handleNewMessage = useCallback((data: any) => {
-    console.log("🔔 Mensaje recibido (handler):", data);
+  // ✨ Cargar usuario anónimo existente (NO crea uno nuevo)
+  const loadExistingAnonymousUser = () => {
+    if (currentUser || anonymousUser) return anonymousUser;
     
-    if (data && typeof data === 'object' && data.texto) {
-      const newMessage: Message = {
-        texto: data.texto,
-        esAdmin: data.esAdmin !== undefined ? Boolean(data.esAdmin) : true,
-        creado: new Date(data.creado || Date.now()),
-        leido: isOpen
-      };
-      
-      setMessages(prevMessages => [...prevMessages, newMessage]);
-      
-      // Incrementar contador solo si el chat está cerrado y es un mensaje del admin
-      if (!isOpen && data.esAdmin) {
-        setUnreadCount(prev => prev + 1);
-      }
-    }
-  }, [isOpen]);
-
-  // Función para conectar el socket
-  const connectSocket = useCallback(() => {
     try {
-      console.log("Intentando conectar al servidor WebSocket...");
-      setIsConnecting(true);
-      
-      // Limpiar socket existente
-      if (socketRef.current) {
-        if (cleanupListenerRef.current) {
-          cleanupListenerRef.current();
-          cleanupListenerRef.current = null;
-        }
-        
-        socketRef.current.off('connect');
-        socketRef.current.off('disconnect');
-        socketRef.current.off('connect_error');
-        
-        if (socketRef.current.connected) {
-          socketRef.current.disconnect();
-        }
-      }
-      
-      // Crear nueva conexión con opciones robustas
-      socketRef.current = io(config.baseUrl, {
-        path: "/socket.io/",
-        transports: ["websocket", "polling"],
-        withCredentials: true,
-        reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        timeout: 20000,
-        autoConnect: true
-      });
-
-      // Configurar eventos del socket
-      if (socketRef.current) {
-        // Evento de conexión
-        socketRef.current.on('connect', () => {
-          console.log("✅ Socket conectado exitosamente: ", socketRef.current?.id);
-          setIsConnected(true);
-          setIsConnecting(false);
-          setReconnectAttempts(0);
-          
-          // Limpiar el intervalo de reconexión si existe
-          if (reconnectInterval.current) {
-            clearInterval(reconnectInterval.current);
-            reconnectInterval.current = null;
-          }
-          
-          // Si ya tenemos un ID de chat, unirnos a la sala
-          if (idChat) {
-            console.log(`Uniendo al chat ${idChat}...`);
-            socketRef.current?.emit(EVENTS.JOIN_CHAT, idChat);
-          }
-        });
-        
-        // Evento de desconexión
-        socketRef.current.on('disconnect', (reason) => {
-          console.log(`Socket desconectado: ${reason}`);
-          setIsConnected(false);
-        });
-        
-        // Evento de error de conexión
-        socketRef.current.on('connect_error', (error) => {
-          console.error("Error de conexión socket:", error);
-          setIsConnected(false);
-          setIsConnecting(false);
-          setReconnectAttempts(prev => prev + 1);
-        });
-        
-        // Configurar listener para mensajes nuevos
-        cleanupListenerRef.current = setupMessageListener(socketRef.current, handleNewMessage);
+      const stored = localStorage.getItem('anonymous_user_data');
+      if (stored) {
+        const anonymousData = JSON.parse(stored);
+        setAnonymousUser(anonymousData);
+        return anonymousData;
       }
     } catch (error) {
-      console.error("Error al inicializar el socket:", error);
-      setIsConnected(false);
-      setIsConnecting(false);
-      setReconnectAttempts(prev => prev + 1);
+      console.warn('Error cargando usuario anónimo:', error);
     }
-  }, [idChat, handleNewMessage]);
+    
+    return null;
+  };
 
-  // Inicializar WebSocket al cargar el componente
-  useEffect(() => {
-    // Comprobar si hay datos guardados
-    const storedChatId = localStorage.getItem('idChat');
-    if (storedChatId) {
-      setIdChat(storedChatId);
-    }
+  // ✨ Crear usuario anónimo (solo cuando sea necesario)
+  const createAnonymousUser = (customName?: string) => {
+    if (currentUser) return null;
     
-    const storedName = localStorage.getItem('chatUserName');
-    const storedPhone = localStorage.getItem('chatUserPhone');
-    
-    if (storedName && storedPhone) {
-      setUserInfo({
-        nombre: storedName,
-        telefono: storedPhone
-      });
-      setFormStep('chat');
-    }
-
-    // Conectar el socket
-    connectSocket();
-    
-    // Reconexión manual cada 30 segundos si está desconectado
-    reconnectInterval.current = setInterval(() => {
-      if (socketRef.current && !socketRef.current.connected && !isConnecting) {
-        console.log("Intentando reconexión periódica...");
-        connectSocket();
-      }
-    }, 30000);
-    
-    // Habilitar la entrada de texto
-    setInputDisabled(false);
-    
-    // Limpiar al desmontar
-    return () => {
-      if (cleanupListenerRef.current) {
-        cleanupListenerRef.current();
-        cleanupListenerRef.current = null;
-      }
-      
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-        socketRef.current = null;
-      }
-      
-      if (reconnectInterval.current) {
-        clearInterval(reconnectInterval.current);
-        reconnectInterval.current = null;
-      }
+    const timestamp = Date.now();
+    const randomId = Math.random().toString(36).substring(2, 8);
+    const anonymousData = {
+      id: `anon_${timestamp}_${randomId}`,
+      name: customName || `Anónimo #${randomId.toUpperCase()}`
     };
-  }, [connectSocket]);
-  
-  // Unirse a la sala de chat cuando cambia el ID
-  useEffect(() => {
-    if (idChat && socketRef.current && socketRef.current.connected) {
-      console.log(`Uniendo al chat ${idChat}...`);
-      socketRef.current.emit(EVENTS.JOIN_CHAT, idChat);
-    }
-  }, [idChat, isConnected]);
 
-  // Auto-scroll al último mensaje
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    // Guardar en localStorage
+    localStorage.setItem('anonymous_user_data', JSON.stringify(anonymousData));
+    setAnonymousUser(anonymousData);
+    
+    return anonymousData;
+  };
 
-  // Cargar mensajes anteriores si hay un chatId
-  useEffect(() => {
-    if (idChat) {
-      fetchPreviousMessages();
+  // ✨ Obtener usuario anónimo (cargar existente o crear si se especifica)
+  const getOrCreateAnonymousUser = (customName?: string, forceCreate: boolean = false) => {
+    if (currentUser) return null;
+    
+    // Si ya tenemos uno en memoria, devolverlo
+    if (anonymousUser) return anonymousUser;
+    
+    // Intentar cargar existente
+    const existing = loadExistingAnonymousUser();
+    if (existing) return existing;
+    
+    // Solo crear uno nuevo si se fuerza o se proporciona un nombre personalizado
+    if (forceCreate || customName) {
+      return createAnonymousUser(customName);
     }
-  }, [idChat]);
+    
+    return null;
+  };
 
-  // Inicializar con mensaje de bienvenida
-  useEffect(() => {
-    if (isOpen && messages.length === 0) {
-      let welcomeMessage = "";
-      
-      switch (formStep) {
-        case 'nombre':
-          welcomeMessage = "¡Hola! 👋 Para poder ayudarte mejor, ¿podrías decirme tu nombre?";
-          break;
-        case 'telefono':
-          welcomeMessage = `¡Gracias ${userInfo.nombre}! 🙂 ¿Podrías proporcionarme tu número de teléfono para contactarte si es necesario?`;
-          break;
-        case 'chat':
-          welcomeMessage = `¡Bienvenido(a) de nuevo, ${userInfo.nombre}! 😊 ¿En qué puedo ayudarte hoy?`;
-          break;
-      }
-      
-      setMessages([
-        {
-          texto: welcomeMessage,
-          esAdmin: true,
-          creado: new Date(),
-          leido: true
-        }
-      ]);
-    }
-  }, [isOpen, formStep, userInfo.nombre, messages.length]);
-  
-  // Enfocar el input cuando se abre el chat
-  useEffect(() => {
-    if (isOpen) {
-      // Usar setTimeout para dar tiempo al DOM a renderizarse
-      setTimeout(() => {
-        const inputElement = document.querySelector('input[type="text"]') as HTMLInputElement;
-        if (inputElement) {
-          inputElement.focus();
-        }
-      }, 100);
-    }
-  }, [isOpen, formStep]);
-
-  const fetchPreviousMessages = async () => {
-    if (!idChat) {
-      console.error("❌ No hay chatId seleccionado");
-      return;
-    }
-  
-    try {
-      console.log(`Obteniendo mensajes anteriores para el chat ${idChat}...`);
-      const response = await fetch(`${config?.baseUrl}${config?.apiPrefix}/chat?idChat=${idChat}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-  
-      const data = await response.json();
-      console.log("✅ Mensajes obtenidos del backend:", data);
-  
-      if (!response.ok) {
-        throw new Error(data.message || "Error al obtener los mensajes");
-      }
-  
-      setMessages(data);
-    } catch (error) {
-      console.error("❌ Error al obtener los mensajes:", error);
+  // ✨ Clave de storage que funcione con o sin usuario autenticado
+  const getChatStorageKey = () => {
+    if (currentUser) {
+      return `chatbot_data_${currentUser.uid}`;
+    } else {
+      // Solo usar el usuario anónimo si ya existe, no crearlo
+      const existing = anonymousUser || loadExistingAnonymousUser();
+      return existing ? `chatbot_data_${existing.id}` : 'chatbot_data_temp';
     }
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  // ✨ Obtener nombre del usuario (autenticado o anónimo)
+  function getUserName() {
+    if (currentUser) {
+      const fullName = `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim();
+      return fullName || 'Usuario';
+    } else {
+      // Solo usar usuario anónimo si ya existe
+      const existing = anonymousUser || loadExistingAnonymousUser();
+      return existing ? existing.name : 'Anónimo';
+    }
+  }
+
+  // ✨ Obtener ID del usuario (autenticado o anónimo)
+  function getUserId() {
+    if (currentUser) {
+      return currentUser.uid;
+    } else {
+      // Solo usar usuario anónimo si ya existe
+      const existing = anonymousUser || loadExistingAnonymousUser();
+      return existing ? existing.id : 'temp_user';
+    }
+  }
+
+  // ✨ Generar ID único para el chat
+  const generateChatId = () => {
+    const userId = getUserId();
+    const timestamp = Date.now();
+    return `chat_${userId}_${timestamp}`;
+  };
+
+  // ✨ Verificar si debe mostrar formulario de nombre
+  const shouldShowNameForm = () => {
+    console.log('🔍 shouldShowNameForm check:', {
+      currentUser: !!currentUser,
+      anonymousUser: !!anonymousUser,
+      hasSeenWelcome,
+      messagesLength: messages.length,
+      isInitialized
+    });
+    
+    return !currentUser && !anonymousUser && !hasSeenWelcome && messages.length === 0 && isInitialized;
+  };
+
+  // ✨ Manejar envío del formulario de nombre
+  const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim()) return;
-    
-    // Temporalmente deshabilitamos el input para evitar múltiples envíos
-    setInputDisabled(true);
-    
-    // Manejar diferentes pasos del formulario
-    if (formStep === 'nombre') {
-      // Guardar nombre y mostrar mensaje de usuario
-      const userMessage: Message = {
-        texto: inputText,
-        esAdmin: false,
-        creado: new Date(),
-        leido: true
-      };
-      
-      setMessages(prevMessages => [...prevMessages, userMessage]);
-      
-      // Actualizar información del usuario
-      setUserInfo(prev => ({ ...prev, nombre: inputText }));
-      localStorage.setItem('chatUserName', inputText);
-      
-      // Limpiar input y avanzar al siguiente paso
-      setInputText('');
-      setFormStep('telefono');
-      
-      // Añadir mensaje solicitando teléfono
-      setTimeout(() => {
-        const botResponse: Message = {
-          texto: `¡Gracias ${inputText}! 🙂 ¿Podrías proporcionarme tu número de teléfono para contactarte si es necesario?`,
-          esAdmin: true,
-          creado: new Date(),
-          leido: true
-        };
-        setMessages(prev => [...prev, botResponse]);
-        setInputDisabled(false); // Volvemos a habilitar el input
-      }, 500);
-    } 
-    else if (formStep === 'telefono') {
-      // Validar formato de teléfono (ajustar según necesidades)
-      const phoneRegex = /^\d{9,15}$/;
-      if (!phoneRegex.test(inputText.replace(/\s+/g, ''))) {
-        // Añadir mensaje de error
-        const errorMessage: Message = {
-          texto: "Por favor, introduce un número de teléfono válido (solo números, mínimo 9 dígitos).",
-          esAdmin: true,
-          creado: new Date(),
-          leido: true
-        };
-        setMessages(prev => [...prev, errorMessage]);
-        setInputDisabled(false); // Habilitamos el input después del error
-        return;
-      }
-      
-      // Guardar teléfono y mostrar mensaje de usuario
-      const userMessage: Message = {
-        texto: inputText,
-        esAdmin: false,
-        creado: new Date(),
-        leido: true
-      };
-      
-      setMessages(prevMessages => [...prevMessages, userMessage]);
-      
-      // Actualizar información del usuario
-      setUserInfo(prev => ({ ...prev, telefono: inputText }));
-      localStorage.setItem('chatUserPhone', inputText);
-      
-      // Limpiar input y avanzar al chat
-      setInputText('');
-      setFormStep('chat');
-      
-      // Añadir mensaje de bienvenida al chat
-      setTimeout(() => {
-        const botResponse: Message = {
-          texto: `¡Perfecto! ¿En qué puedo ayudarte hoy?`,
-          esAdmin: true,
-          creado: new Date(),
-          leido: true
-        };
-        setMessages(prev => [...prev, botResponse]);
-        setInputDisabled(false); // Volvemos a habilitar el input
-      }, 500);
-    }
-    else {
-      // Procesar mensaje normal del chat
-      handleSendChatMessage();
-    }
-  };
+    if (!tempUserName.trim()) return;
 
-  const handleSendChatMessage = async () => {
-    if (!inputText.trim()) return;
-  
-    console.log("Enviando mensaje:", inputText);
+    setIsSubmittingName(true);
     
-    // Deshabilitamos temporalmente el input
-    setInputDisabled(true);
+    // Crear usuario anónimo con el nombre personalizado
+    createAnonymousUser(tempUserName.trim());
     
-    const userMessage: Message = {
-      texto: inputText,
-      esAdmin: false,
-      creado: new Date(),
-      leido: true
-    };
-  
-    setMessages(prev => [...prev, userMessage]);
-    const currentInputText = inputText;
-    setInputText('');
+    // Ocultar formulario y mostrar mensaje de bienvenida
+    setShowNameForm(false);
+    setTempUserName('');
     
-    try {
-      console.log("Enviando al servidor:", {
-        texto: currentInputText,
-        nombreUsuario: userInfo.nombre,
-        telefono: userInfo.telefono,
-        idChat: idChat
-      });
-      
-      // Verificar conexión
-      if (socketRef.current && !socketRef.current.connected) {
-        console.log("Socket desconectado, intentando reconectar antes de enviar...");
-        connectSocket();
-        
-        // Mostrar un mensaje de espera mientras se reconecta
-        const waitMessage: Message = {
-          texto: "Estableciendo conexión con el servidor, tu mensaje se enviará en breve...",
-          esAdmin: true,
-          creado: new Date(),
-          leido: true
-        };
-        
-        setMessages(prev => [...prev, waitMessage]);
-        
-        // Esperar un poco para dar tiempo a la reconexión
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-      
-      // Enviar mensaje al servidor REST
-      const response = await fetch(`${config?.baseUrl}${config?.apiPrefix}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          texto: currentInputText,
-          nombreUsuario: userInfo.nombre,
-          telefono: userInfo.telefono,
-          idChat: idChat
-        })
-      });
-  
-      const data = await response.json();
-      
-      // Si es un nuevo chat, guardar el chatId
-      if (data.idChat && (!idChat || idChat !== data.idChat)) {
-        setIdChat(data.idChat);
-        localStorage.setItem('idChat', data.idChat);
-        
-        // Unirse a la sala de chat
-        if (socketRef.current && socketRef.current.connected) {
-          try {
-            socketRef.current.emit(EVENTS.JOIN_CHAT, data.idChat);
-          } catch (socketError) {
-            console.error("Error al enviar evento JOIN_CHAT:", socketError);
-          }
-        }
-      }
-  
-      // Enviar mensaje a través de WebSocket
-      if (socketRef.current && socketRef.current.connected) {
-        try {
-          socketRef.current.emit(EVENTS.CLIENT_MESSAGE, {
-            idChat: idChat || data.idChat,
-            texto: currentInputText,
-            nombreUsuario: userInfo.nombre,
-            telefono: userInfo.telefono,
-            creado: new Date(),
-            esAdmin: false
-          });
-        } catch (socketError) {
-          console.error("Error al emitir mensaje del cliente:", socketError);
-        }
-      }
-      
-    } catch (error) {
-      console.error('Error al enviar mensaje:', error);
-      
-      // Mensaje de error en caso de fallo
-      const errorMessage: Message = {
-        texto: "Lo siento, ha ocurrido un error al enviar tu mensaje. Por favor, inténtalo de nuevo más tarde.",
-        esAdmin: true,
-        creado: new Date(),
-        leido: true
-      };
-      
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      // Siempre volvemos a habilitar el input después de procesar
-      setInputDisabled(false);
-    }
-  };
-
-  const handleOpen = () => {
-    setIsOpen(true);
-  };
-
-  const handleClose = () => {
-    setIsOpen(false);
-  };
-
-  // Reiniciar chat
-  const handleReset = () => {
-    // Preguntar al usuario si está seguro
-    if (!confirm("¿Estás seguro de que deseas reiniciar el chat? Se perderá toda la conversación.")) {
-      return;
-    }
-    
-    localStorage.removeItem('chatUserName');
-    localStorage.removeItem('chatUserPhone');
-    localStorage.removeItem('idChat');
-    
-    setUserInfo({ nombre: '', telefono: '' });
-    setFormStep('nombre');
-    setIdChat(null);
-    setMessages([]);
-    setInputDisabled(false);
-    
-    // Mostrar mensaje de bienvenida
     setTimeout(() => {
-      const welcomeMessage: Message = {
-        texto: "¡Hola! 👋 Para poder ayudarte mejor, ¿podrías decirme tu nombre?",
-        esAdmin: true,
-        creado: new Date(),
-        leido: true
-      };
-      setMessages([welcomeMessage]);
+      showWelcomeMessage();
+      setIsSubmittingName(false);
     }, 300);
   };
 
-  // Componente del botón de chat (siempre visible)
-  const ChatButton = () => (
-    <div className="fixed bottom-4 right-4 flex flex-col items-end gap-2 z-50">
-      {unreadCount > 0 && (
-        <div className="bg-red-600 text-white rounded-full px-2 py-1 text-sm flex items-center gap-1">
-          <Bell className="w-4 h-4" />
-          {unreadCount} nuevo{unreadCount !== 1 ? 's' : ''}
+  const getWelcomeMessage = (): Message => ({
+    id: 'welcome-message',
+    texto: `¡Hola! 👋\n\nBienvenido a nuestro servicio de soporte. Estamos aquí para ayudarte con cualquier pregunta o problema que tengas.\n\n¿En qué podemos ayudarte hoy?`,
+    esAdmin: true,
+    creado: new Date(),
+    isWelcome: true
+  });
+
+  // Función para reproducir sonido de notificación
+  const playNotificationSound = () => {
+    if (!notificationsEnabled) return;
+    
+    try {
+      const audio = new Audio('/notification.mp3');
+      audio.volume = 0.4;
+      audio.play().catch(() => {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        
+        const createBeep = (frequency: number, duration: number, delay: number) => {
+          setTimeout(() => {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.value = frequency;
+            oscillator.type = 'sine';
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + duration);
+          }, delay);
+        };
+
+        createBeep(800, 0.15, 0);
+        createBeep(1000, 0.15, 200);
+        createBeep(800, 0.15, 400);
+      });
+    } catch (error) {
+      console.warn('Error reproduciendo sonido:', error);
+    }
+  };
+
+  // Solicitar permisos de notificación
+  const requestNotificationPermission = async () => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      try {
+        const permission = await Notification.requestPermission();
+        console.log('Permiso de notificación:', permission);
+      } catch (error) {
+        console.warn('Error solicitando permisos de notificación:', error);
+      }
+    }
+  };
+
+  // ✨ Sincronizar chat con backend (actualizado)
+  const syncChatIdWithBackend = async () => {
+    const savedChat = loadChatData();
+    if (!savedChat) {
+      setIsInitialized(true); // ✨ Marcar como inicializado incluso si no hay chat guardado
+      return;
+    }
+
+    try {
+      const res = await fetch(`${config.baseUrl}${config.apiPrefix}/chat/exists?idChat=${savedChat.chatId}`);
+      const data = await res.json();
+
+      if (data.exists) {
+        console.log('✅ ChatId válido confirmado por backend:', savedChat.chatId);
+        setChatId(savedChat.chatId);
+        setMessages(savedChat.messages);
+        setHasSeenWelcome(savedChat.hasSeenWelcome || false);
+        setUnreadCount(savedChat.unreadCount || 0);
+        setHasNewMessage((savedChat.unreadCount || 0) > 0);
+        
+        // ✨ Restaurar usuario anónimo si existe
+        if (savedChat.anonymousUser && !currentUser) {
+          setAnonymousUser(savedChat.anonymousUser);
+        }
+      } else {
+        console.warn('⚠️ Chat eliminado en backend. Limpiando estado...');
+        localStorage.removeItem(getChatStorageKey());
+        setChatId(null);
+        setMessages([]);
+        setHasSeenWelcome(false);
+        setUnreadCount(0);
+        setHasNewMessage(false);
+      }
+    } catch (err) {
+      console.error('❌ Error al validar existencia del chat en backend:', err);
+      localStorage.removeItem(getChatStorageKey());
+      setChatId(null);
+      setMessages([]);
+      setHasSeenWelcome(false);
+      setUnreadCount(0);
+      setHasNewMessage(false);
+    } finally {
+      setIsInitialized(true); // ✨ Marcar como inicializado al final
+    }
+  };
+
+  // Mostrar notificación del sistema
+  const showSystemNotification = (message: string) => {
+    if (!notificationsEnabled) return;
+    
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        const notification = new Notification('💬 Nuevo mensaje - Soporte', {
+          body: message.length > 50 ? message.substring(0, 50) + '...' : message,
+          icon: '/favicon.ico',
+          badge: '/favicon.ico',
+          tag: 'chat-notification',
+          requireInteraction: true,
+          silent: false,
+        });
+
+        notification.onclick = () => {
+          window.focus();
+          setIsOpen(true);
+          setIsMinimized(false);
+          markMessagesAsRead();
+          notification.close();
+        };
+
+        setTimeout(() => notification.close(), 8000);
+      } catch (error) {
+        console.warn('Error mostrando notificación:', error);
+      }
+    }
+  };
+
+  // Función para marcar mensajes como leídos
+  const markMessagesAsRead = () => {
+    setUnreadCount(0);
+    setHasNewMessage(false);
+  };
+
+  // ✨ Guardar datos del chat en localStorage (actualizado)
+  const saveChatData = (chatId: string, messages: Message[], hasSeenWelcome: boolean = false, unreadCount: number = 0) => {
+    try {
+      const chatData: ChatData = {
+        chatId,
+        messages: messages.map(msg => ({
+          ...msg,
+          creado: new Date(msg.creado)
+        })),
+        lastActivity: Date.now(),
+        hasSeenWelcome,
+        unreadCount,
+        // ✨ Solo guardar usuario anónimo si ya existe
+        anonymousUser: !currentUser ? (anonymousUser || null) : null
+      };
+      localStorage.setItem(getChatStorageKey(), JSON.stringify(chatData));
+    } catch (error) {
+      console.warn('No se pudo guardar el chat en localStorage:', error);
+    }
+  };
+
+  // ✨ Cargar datos del chat desde localStorage (actualizado)
+  const loadChatData = (): ChatData | null => {
+    try {
+      const stored = localStorage.getItem(getChatStorageKey());
+      if (!stored) return null;
+
+      const chatData: ChatData = JSON.parse(stored);
+      
+      // Verificar si el chat ha expirado (12 horas)
+      const hoursElapsed = (Date.now() - chatData.lastActivity) / (1000 * 60 * 60);
+      if (hoursElapsed > CHAT_EXPIRY_HOURS) {
+        localStorage.removeItem(getChatStorageKey());
+        return null;
+      }
+
+      // Convertir fechas de string a Date
+      chatData.messages = chatData.messages.map(msg => ({
+        ...msg,
+        creado: new Date(msg.creado)
+      }));
+
+      return chatData;
+    } catch (error) {
+      console.warn('Error cargando chat desde localStorage:', error);
+      localStorage.removeItem(getChatStorageKey());
+      return null;
+    }
+  };
+
+  // Limpiar chat expirado
+  const cleanupExpiredChat = () => {
+    const stored = loadChatData();
+    if (!stored) {
+      localStorage.removeItem(getChatStorageKey());
+    }
+  };
+
+  // Mostrar mensaje de bienvenida
+  const showWelcomeMessage = () => {
+    if (!hasSeenWelcome) {
+      const welcomeMessage = getWelcomeMessage();
+      setMessages(prev => [welcomeMessage, ...prev]);
+      setHasSeenWelcome(true);
+    }
+  };
+
+  // Animación de admin escribiendo
+  const TypingIndicator = () => (
+    <div className="flex justify-start mb-3">
+      <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm max-w-[80%]">
+        <div className="flex items-center space-x-1">
+          <span className="text-sm text-gray-600">El admin está escribiendo</span>
+          <div className="flex space-x-1">
+            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+          </div>
         </div>
-      )}
-      <button
-        onClick={handleOpen}
-        className="bg-red-600 text-white p-4 rounded-full shadow-lg hover:bg-red-700 transition-all transform hover:scale-110"
-      >
-        <MessageCircle className="w-6 h-6" />
-      </button>
+      </div>
     </div>
   );
 
-  // Componente de la ventana de chat
-  const ChatWindow = () => (
-    <div className="fixed bottom-4 right-4 w-96 max-w-full bg-white rounded-lg shadow-lg overflow-hidden flex flex-col z-50" style={{ height: '520px', maxHeight: '80vh' }}>
-      <div className="bg-red-600 p-3 text-white flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Bot className="w-5 h-5" />
-          <h1 className="text-lg font-semibold">Atención al Cliente</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          {formStep === 'chat' && (
-            <button
-              onClick={handleReset}
-              className="text-white hover:text-red-200 transition-colors text-sm px-2 py-1 bg-red-700 rounded"
-            >
-              Reiniciar
-            </button>
-          )}
-          <button
-            onClick={handleClose}
-            className="text-white hover:text-red-200 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
+  // Manejar mensajes entrantes
+  const handleIncomingMessage = (data: any) => {
+    console.log('📨 Mensaje recibido via socketService:', data);
+    
+    if (data.idChat === chatId) {
+      const newMessage: Message = {
+        id: data.id || `${data.esAdmin ? 'admin' : 'client'}-${Date.now()}-${Math.random()}`,
+        texto: data.texto,
+        esAdmin: data.esAdmin,
+        creado: new Date(data.creado)
+      };
+      
+      if (data.esAdmin && adminTyping) {
+        setAdminTyping(false);
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+        }
+      }
+      
+      setMessages(prev => {
+        const exists = prev.some(msg => 
+          msg.id === newMessage.id || 
+          (msg.texto === newMessage.texto && 
+          msg.esAdmin === newMessage.esAdmin && 
+          Math.abs(new Date(msg.creado).getTime() - new Date(newMessage.creado).getTime()) < 1000)
+        );
+        
+        if (exists) {
+          console.log('⚠️ Mensaje duplicado detectado, ignorando');
+          return prev;
+        }
+        
+        console.log('✅ Agregando nuevo mensaje:', newMessage);
+        return [...prev, newMessage];
+      });
+      
+      if (data.esAdmin && (isMinimized || !isOpen)) {
+        setUnreadCount(prev => prev + 1);
+        setHasNewMessage(true);
+        showSystemNotification(data.texto);
+        playNotificationSound();
+      }
+    } else {
+      console.log('⚠️ Mensaje ignorado - no es para este chat:', data.idChat, 'vs', chatId);
+    }
+  };
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message, index) => (
-          <div key={index} className={`flex ${message.esAdmin ? 'justify-start' : 'justify-end'}`}>
-            <div className={`flex items-start gap-2 max-w-[80%] ${message.esAdmin ? 'flex-row' : 'flex-row-reverse'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${message.esAdmin ? 'bg-red-100' : 'bg-green-100'}`}>
-                {message.esAdmin ? <Bot className="w-5 h-5 text-red-600" /> : <User className="w-5 h-5 text-green-600" />}
-              </div>
-              <div className={`rounded-lg p-3 ${message.esAdmin ? 'bg-red-100 text-red-900' : 'bg-green-100 text-green-900'}`}>
-                <p className="text-sm whitespace-pre-wrap">{message.texto}</p>
-                <p className="text-xs mt-1 opacity-50">{new Date(message.creado).toLocaleTimeString()}</p>
+  // Toggle chat
+  const toggleChat = () => {
+    setIsOpen(prev => {
+      const newState = !prev;
+      if (newState) {
+        markMessagesAsRead();
+        
+        // ✨ Verificar si debe mostrar formulario de nombre cuando se abre el chat
+        console.log('📝 Chat abierto, verificando si mostrar formulario de nombre...');
+        const shouldShow = shouldShowNameForm();
+        console.log('📝 Resultado shouldShowNameForm:', shouldShow);
+        
+        if (shouldShow) {
+          setShowNameForm(true);
+        }
+        
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+      } else {
+        // Al cerrar, ocultar formulario de nombre si está visible
+        setShowNameForm(false);
+        setTempUserName('');
+      }
+      return newState;
+    });
+  };
+
+  // Toggle minimize
+  const toggleMinimize = () => {
+    setIsMinimized(prev => {
+      const newState = !prev;
+      if (!newState) {
+        markMessagesAsRead();
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+      }
+      return newState;
+    });
+  };
+
+  const toggleNotifications = () => {
+    setNotificationsEnabled(!notificationsEnabled);
+    if (!notificationsEnabled) {
+      requestNotificationPermission();
+    }
+  };
+
+  const formatTime = (date: Date) => {
+    return new Intl.DateTimeFormat('es-ES', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).format(date);
+  };
+
+  // Effects
+  useEffect(() => {
+    if (socketRef.current?.connected && chatId) {
+      console.log("📥 Re-enviando JOIN_CHAT por cambio de estado:", chatId);
+      socketRef.current.emit(EVENTS.JOIN_CHAT, chatId);
+    }
+  }, [chatId, isConnected]);
+
+  // ✨ Efecto principal de inicialización (corregido)
+  useEffect(() => {
+    console.log('🔄 Inicializando chat component...');
+    
+    // Resetear estados
+    setChatId(null);
+    setMessages([]);
+    setHasSeenWelcome(false);
+    setAdminTyping(false);
+    setHasNewMessage(false);
+    setUnreadCount(0);
+    setIsInitialized(false);
+    setShowNameForm(false);
+    setAnonymousUser(null);
+
+    // ✨ Si no hay usuario autenticado, intentar cargar usuario anónimo existente (NO crear uno nuevo)
+    if (!currentUser) {
+      loadExistingAnonymousUser();
+    }
+
+    cleanupExpiredChat();
+    syncChatIdWithBackend();
+    requestNotificationPermission();
+  }, [currentUser?.uid]);
+
+  // ✨ Efecto para mostrar formulario de nombre cuando el chat está inicializado
+  useEffect(() => {
+    if (isInitialized && isOpen && !isMinimized) {
+      const shouldShow = shouldShowNameForm();
+      console.log('🎯 Evaluando mostrar formulario después de inicializar:', {
+        isInitialized,
+        isOpen,
+        isMinimized,
+        shouldShow,
+        showNameForm
+      });
+      
+      if (shouldShow && !showNameForm) {
+        console.log('📝 Mostrando formulario de nombre');
+        setShowNameForm(true);
+      }
+    }
+  }, [isInitialized, isOpen, isMinimized, currentUser, anonymousUser, hasSeenWelcome, messages.length]);
+
+  useEffect(() => {
+    if (chatId && messages.length > 0) {
+      saveChatData(chatId, messages, hasSeenWelcome, unreadCount);
+    }
+  }, [chatId, messages, hasSeenWelcome, unreadCount]);
+
+  // ✨ Efecto para mostrar mensaje de bienvenida (corregido)
+  useEffect(() => {
+    if (isOpen && !isMinimized && !hasSeenWelcome && messages.length === 0 && isInitialized) {
+      const timer = setTimeout(() => {
+        // ✨ Solo mostrar bienvenida si no necesita formulario de nombre
+        if (!shouldShowNameForm()) {
+          console.log('👋 Mostrando mensaje de bienvenida');
+          showWelcomeMessage();
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, isMinimized, hasSeenWelcome, messages.length, currentUser, anonymousUser, isInitialized]);
+
+  // Inicializar WebSocket
+  useEffect(() => {
+    if (!socketRef.current) {
+      console.log('🔌 Iniciando conexión WebSocket persistente');
+      socketRef.current = createSocket();
+      setIsConnected(false);
+
+      const handleConnect = () => {
+        console.log('✅ Conexión establecida');
+        setIsConnected(true);
+        if (chatId) {
+          console.log(`🏠 Uniéndose al chat ${chatId}`);
+          socketRef.current!.emit(EVENTS.JOIN_CHAT, chatId);
+        }
+      };
+
+      const handleDisconnect = (reason: string) => {
+        console.log('❌ Desconectado:', reason);
+        setIsConnected(false);
+        setTimeout(() => {
+          if (socketRef.current && !socketRef.current.connected) {
+            console.log('🔄 Intentando reconectar...');
+            socketRef.current.connect();
+          }
+        }, 2000);
+      };
+
+      const handleConnectError = (error: Error) => {
+        console.error('❌ Error de conexión:', error);
+        setIsConnected(false);
+      };
+
+      socketRef.current.on('connect', handleConnect);
+      socketRef.current.on('disconnect', handleDisconnect);
+      socketRef.current.on('connect_error', handleConnectError);
+
+      const pingInterval = setInterval(() => {
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('ping');
+        }
+      }, 25000);
+
+      socketRef.current.connect();
+
+      return () => {
+        clearInterval(pingInterval);
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      };
+    }
+  }, []); 
+
+  useEffect(() => {
+    if (!socketRef.current || !chatId) return;
+
+    console.log('📥 Configurando listener de mensajes para chat:', chatId);
+    
+    socketRef.current.off(EVENTS.NEW_MESSAGE);
+    
+    const messageListener = (data: any) => {
+      console.log('📨 Mensaje recibido en listener:', data);
+      handleIncomingMessage(data);
+    };
+    
+    socketRef.current.on(EVENTS.NEW_MESSAGE, messageListener);
+    
+    if (socketRef.current.connected) {
+      console.log(`🏠 Uniéndose al chat ${chatId}`);
+      socketRef.current.emit(EVENTS.JOIN_CHAT, chatId);
+    }
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.off(EVENTS.NEW_MESSAGE, messageListener);
+      }
+    };
+  }, [chatId]);
+
+  useEffect(() => {
+    if (messagesEndRef.current && !isMinimized) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isMinimized, adminTyping]);
+
+  // ✨ Función de envío de mensajes actualizada
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim() || isLoading) return;
+
+    const socket = socketRef.current;
+    const messageText = newMessage.trim();
+    const userName = getUserName();
+    const userId = getUserId();
+    let currentChatId = chatId;
+
+    setIsLoading(true);
+
+    try {
+      // Si no hay chat aún, crea uno con el primer mensaje
+      if (!currentChatId) {
+        const response = await fetch(`${config.baseUrl}${config.apiPrefix}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            texto: messageText,
+            nombreUsuario: userName,
+            userId: userId, // ✨ Ahora funciona con usuario anónimo o autenticado
+          })
+        });
+
+        const result = await response.json();
+        if (!response.ok || !result.idChat) throw new Error('No se pudo crear el chat');
+
+        currentChatId = result.idChat;
+        setChatId(currentChatId);
+
+        // Mostrar mensaje del usuario inmediatamente
+        const userMessage: Message = {
+          id: `client-${Date.now()}`,
+          texto: messageText,
+          esAdmin: false,
+          creado: new Date()
+        };
+        setMessages(prev => [...prev, userMessage]);
+
+        // Mostrar respuesta automática si la hay
+        if (result.texto) {
+          const adminMessage: Message = {
+            id: `admin-${Date.now()}`,
+            texto: result.texto,
+            esAdmin: true,
+            creado: new Date(result.creado)
+          };
+          setMessages(prev => [...prev, adminMessage]);
+        }
+
+      } else {
+        // Usar la función para guardar + emitir el mensaje
+        const saved = await emitClientMessage(socket!, currentChatId, messageText, userName);
+
+        // Agregar el mensaje confirmado
+        const newMessageObj: Message = {
+          id: `client-${Date.now()}-${Math.random()}`,
+          texto: saved.texto,
+          esAdmin: false,
+          creado: new Date(saved.creado)
+        };
+
+        setMessages(prev => [...prev, newMessageObj]);
+      }
+
+      setNewMessage('');
+
+    } catch (error) {
+      console.error('❌ Error al enviar mensaje:', error);
+      setMessages(prev => [...prev, {
+        id: `error-${Date.now()}`,
+        texto: 'Error al enviar el mensaje. Inténtalo de nuevo.',
+        esAdmin: true,
+        creado: new Date()
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+    
+  useEffect(() => {
+    const interval = setInterval(cleanupExpiredChat, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  return (
+    <div className={`fixed bottom-4 right-4 z-50 ${className}`}>
+      {/* Botón flotante */}
+      {!isOpen && (
+        <button
+          onClick={toggleChat}
+          className="bg-red-500 hover:bg-red-600 text-white rounded-full p-4 shadow-lg transition-all duration-200 hover:scale-110 relative group"
+          aria-label="Abrir chat"
+        >
+          <MessageCircle className="w-6 h-6" />
+          
+          {unreadCount > 0 && (
+            <span className="absolute -top-2 -right-2 bg-green-500 text-white text-xs font-bold rounded-full min-w-6 h-6 flex items-center justify-center animate-pulse shadow-lg border-2 border-white">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+          
+          {hasNewMessage && (
+            <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-75"></span>
+          )}
+          
+          <div className="absolute bottom-full right-0 mb-2 bg-black text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+            {unreadCount > 0 ? `${unreadCount} mensajes nuevos` : 'Abrir chat de soporte'}
+          </div>
+        </button>
+      )}
+
+      {/* Ventana de chat */}
+      {isOpen && (
+        <div className="bg-white rounded-lg shadow-2xl border border-gray-200 w-96 h-[500px] flex flex-col animate-in slide-in-from-bottom-4 duration-300">
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 bg-red-500 text-white rounded-t-lg">
+            <div className="flex items-center space-x-2">
+              <User className="w-5 h-5" />
+              <div>
+                <h3 className="font-semibold">Soporte al Cliente</h3>
+                <p className="text-xs opacity-75 flex items-center">
+                  <span className={`inline-block w-2 h-2 rounded-full mr-1 ${isConnected ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></span>
+                  {isConnected ? 'En línea' : 'Desconectado'}
+                  {adminTyping && ' • Admin escribiendo...'}
+                  {unreadCount > 0 && ` • ${unreadCount} no leídos`}
+                </p>
               </div>
             </div>
+            <div className="flex space-x-2">
+              <button
+                onClick={toggleNotifications}
+                className={`hover:bg-red-600 p-1 rounded transition-colors ${!notificationsEnabled ? 'opacity-50' : ''}`}
+                aria-label={notificationsEnabled ? "Desactivar notificaciones" : "Activar notificaciones"}
+                title={notificationsEnabled ? "Desactivar notificaciones" : "Activar notificaciones"}
+              >
+                {notificationsEnabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
+              </button>
+              <button
+                onClick={toggleMinimize}
+                className="hover:bg-red-600 p-1 rounded transition-colors"
+                aria-label={isMinimized ? "Maximizar" : "Minimizar"}
+              >
+                {isMinimized ? <Maximize2 className="w-4 h-4" /> : <Minimize2 className="w-4 h-4" />}
+              </button>
+              <button
+                onClick={toggleChat}
+                className="hover:bg-red-600 p-1 rounded transition-colors"
+                aria-label="Cerrar chat"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
 
-      <form onSubmit={handleFormSubmit} className="p-3 border-t">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            disabled={inputDisabled}
-            placeholder={
-              formStep === 'nombre' ? "Escribe tu nombre..." : 
-              formStep === 'telefono' ? "Escribe tu número de teléfono..." : 
-              "Escribe tu mensaje..."
-            }
-            className="flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-            autoComplete={formStep === 'telefono' ? 'tel' : formStep === 'nombre' ? 'name' : 'off'}
-          />
-          <button
-            type="submit"
-            className={`${inputDisabled ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'} text-white px-3 py-2 rounded-lg transition-colors flex items-center gap-1`}
-            disabled={!inputText.trim() || inputDisabled}
-          >
-            <Send className="w-4 h-4" />
-            <span className="hidden sm:inline">Enviar</span>
-          </button>
-        </div>
-      </form>
-      
-      {(!isConnected && formStep === 'chat') && (
-        <div className={`text-xs p-2 text-center ${isConnecting ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
-          {isConnecting ? "Conectando al servidor..." : "Desconectado. Intentando reconectar..."}
+          {/* Contenido del chat */}
+          {!isMinimized && (
+            <>
+              {/* ✨ Formulario de nombre para usuarios anónimos */}
+              {showNameForm && (
+                <div className="flex-1 flex items-center justify-center p-6 bg-gray-50">
+                  <div className="w-full max-w-sm">
+                    <div className="text-center mb-6">
+                      <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <User className="w-8 h-8 text-red-500" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                        ¡Bienvenido al chat de soporte!
+                      </h3>
+                      <p className="text-sm text-gray-600">
+                        Para brindarte una mejor atención, por favor ingresa tu nombre:
+                      </p>
+                    </div>
+                    
+                    <form onSubmit={handleNameSubmit} className="space-y-4">
+                      <div>
+                        <input
+                          type="text"
+                          value={tempUserName}
+                          onChange={(e) => setTempUserName(e.target.value)}
+                          placeholder="Tu nombre..."
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent text-sm"
+                          disabled={isSubmittingName}
+                          autoFocus
+                          maxLength={50}
+                        />
+                      </div>
+                      
+                      <div className="flex space-x-3">
+                        <button
+                          type="submit"
+                          disabled={!tempUserName.trim() || isSubmittingName}
+                          className="flex-1 bg-red-500 hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-3 rounded-lg transition-colors text-sm font-medium"
+                        >
+                          {isSubmittingName ? 'Iniciando...' : 'Comenzar chat'}
+                        </button>
+                        
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // Continuar como anónimo - crear usuario anónimo
+                            createAnonymousUser();
+                            setShowNameForm(false);
+                            setTimeout(() => showWelcomeMessage(), 300);
+                          }}
+                          className="px-4 py-3 text-gray-500 hover:text-gray-700 text-sm transition-colors"
+                          disabled={isSubmittingName}
+                        >
+                          Continuar como Anónimo
+                        </button>
+                      </div>
+                    </form>
+                    
+                    <div className="mt-4 text-center">
+                      <p className="text-xs text-gray-500">
+                        Tu nombre solo será visible para nuestro equipo de soporte
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Área de mensajes - Solo visible si no hay formulario de nombre */}
+              {!showNameForm && (
+                <>
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
+                    {messages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={`flex ${message.esAdmin ? 'justify-start' : 'justify-end'} ${
+                          message.isWelcome ? 'animate-in slide-in-from-left-4 duration-500' : ''
+                        }`}
+                      >
+                        <div
+                          className={`max-w-[80%] rounded-lg p-3 ${
+                            message.esAdmin
+                              ? message.isWelcome
+                                ? 'bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 text-gray-800'
+                                : 'bg-white border border-gray-200 text-gray-800'
+                              : 'bg-red-500 text-white'
+                          } shadow-sm transition-all duration-200`}
+                        >
+                          <p className="text-sm whitespace-pre-line">{message.texto}</p>
+                          <p className={`text-xs mt-1 ${
+                            message.esAdmin ? 'text-gray-500' : 'text-red-100'
+                          }`}>
+                            {formatTime(message.creado)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {adminTyping && <TypingIndicator />}
+                    
+                    <div ref={messagesEndRef} />
+                  </div>
+
+                  {/* Formulario de envío - Solo visible si no hay formulario de nombre */}
+                  <form onSubmit={handleSendMessage} className="p-4 border-t border-gray-200">
+                    <div className="flex space-x-2">
+                      <input
+                        type="text"
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        placeholder="Escribe tu mensaje..."
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent text-sm transition-all"
+                        disabled={isLoading}
+                      />
+                      <button
+                        type="submit"
+                        disabled={isLoading || !newMessage.trim()}
+                        className="bg-red-500 hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white p-2 rounded-lg transition-colors"
+                        aria-label="Enviar mensaje"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </form>
+                </>
+              )}
+            </>
+          )}
+
+          {/* Vista minimizada */}
+          {isMinimized && (
+            <div className="p-4 text-center">
+              <p className="text-sm text-gray-600">Chat minimizado</p>
+              {hasNewMessage && (
+                <p className="text-xs text-green-600 mt-1 animate-pulse">💬 Nuevo mensaje recibido</p>
+              )}
+              {adminTyping && (
+                <p className="text-xs text-blue-600 mt-1">✍️ Admin está escribiendo...</p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
   );
-
-  // Renderizado condicional basado en si el chat está abierto o no
-  return (
-    <>
-      <ChatButton />
-      {isOpen && <ChatWindow />}
-    </>
-  );
-}
+};
 
 export default ChatBot;

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { FaMinus, FaPlus, FaShoppingCart, FaTrash } from "react-icons/fa";
 import { useNavigate, useLocation } from "react-router-dom";
 import PriceTag from "./PriceTag";
+import FormatoPrecio from "./FormatoPrecio";
 
 const AddToCartBtn = ({
   className,
@@ -25,6 +26,11 @@ const AddToCartBtn = ({
   const location = useLocation();
   
   const isCartPage = location.pathname === "/carrito";
+
+  // ✅ NUEVO: Verificar si Lista 2 está activa
+  const isLista2Active = product?.lista2_activa === true;
+  const hasLista2Price = product?.lista2 && product.lista2 > 0;
+  const showLista2 = isLista2Active && hasLista2Price;
 
   useEffect(() => {
     const availableItem = cartProduct.find((item) => item?.idproducto === product?.idproducto);
@@ -83,20 +89,41 @@ const AddToCartBtn = ({
   );
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 w-full">
+      {/* ✅ SECCIÓN DE PRECIO - Mantiene el estilo original */}
       {showPrice && (
         <div>
-          <PriceTag
-            precio={existingProduct ? existingProduct.lista2 * existingProduct.cantidad : product?.lista2 ?? 0}
-            precioDescuento={existingProduct ? existingProduct.lista1 ?? 0 : product?.lista1 ?? 0}
-          />
+          {/* ✅ ACTUALIZADO: Solo mostrar PriceTag si Lista 2 está activa y hay descuento real */}
+          {showLista2 && existingProduct ? (
+            <PriceTag
+              precio={existingProduct.lista2 * existingProduct.cantidad}
+              precioDescuento={existingProduct.lista1 * existingProduct.cantidad}
+            />
+          ) : showLista2 && product ? (
+            <PriceTag
+              precio={product.lista2}
+              precioDescuento={product.lista1}
+            />
+          ) : (
+            // Mostrar precio simple cuando Lista 2 no está activa o no hay descuento real
+            <div className="text-lg font-bold text-gray-900">
+              <FormatoPrecio 
+                amount={existingProduct 
+                  ? existingProduct.lista1 * existingProduct.cantidad 
+                  : product?.lista1 ?? 0
+                } 
+              />
+            </div>
+          )}
         </div>
       )}
       
-      <div className="flex flex-col gap-2">
+      {/* ✅ SECCIÓN DE BOTONES - Siempre centrada independientemente del precio */}
+      <div className="w-full flex flex-col gap-2 items-center justify-center">
         {existingProduct ? (
           <>
-            <div className="flex self-center items-center justify-center gap-2">
+            {/* Controles de cantidad - centrados */}
+            <div className="flex items-center justify-center gap-2">
               <button
                 onClick={handleDeleteProduct}
                 className="bg-[#f7f7f7] text-textoRojo p-2 border-[1px] border-gray-200 hover:border-textoAmarillo rounded-full text-sm hover:bg-textoAmarillo duration-200 cursor-pointer"
@@ -120,10 +147,12 @@ const AddToCartBtn = ({
                 <FaTrash />
               </button>
             </div>
+            
+            {/* Botón "Ver carrito" - centrado y con ancho completo */}
             {!isCartPage && (
               <button 
                 onClick={handleGoToCart} 
-                className="flex items-center justify-center gap-2 bg-textoRojo text-white py-3 px-4 rounded-full hover:bg-red-700 transition-all duration-200 text-sm font-medium"
+                className="flex items-center justify-center gap-2 bg-textoRojo text-white py-3 px-4 rounded-full hover:bg-red-700 transition-all duration-200 text-sm font-medium w-full"
               >
                 <FaShoppingCart />
                 Ver carrito
@@ -131,20 +160,22 @@ const AddToCartBtn = ({
             )}
           </>
         ) : isAddedToCart && !isCartPage ? (
+          // Botón "Ir al carrito" - centrado y con ancho completo
           <button 
             onClick={handleGoToCart} 
             className={twMerge(
               newClassName, 
-              "bg-textoRojo hover:bg-red-700 text-white flex items-center justify-center gap-2"
+              "bg-textoRojo hover:bg-red-700 text-white flex items-center justify-center gap-2 w-full"
             )}
           >
             <FaShoppingCart className="text-base" />
             <span>Ir al carrito</span>
           </button>
         ) : (
+          // Botón "Agregar al carrito" - centrado y con ancho completo
           <button 
             onClick={handleAddToCart} 
-            className={twMerge(newClassName, "flex items-center justify-center gap-2")}
+            className={twMerge(newClassName, "flex items-center justify-center gap-2 w-full")}
           >
             <span>{title || "Agregar al carrito"}</span>
           </button>

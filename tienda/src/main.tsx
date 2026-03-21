@@ -3,13 +3,13 @@ import ReactDOM from "react-dom/client";
 import "./index.css";
 import App from "./App.tsx";
 import { AuthProvider } from "./context/AuthContext";
+import { ShopifyProvider } from "./context/ShopifyContext.tsx"; // ✅ NUEVO IMPORT
 import Layout from "./ui/Layout.tsx";
 import { createBrowserRouter, Outlet, RouterProvider } from "react-router-dom";
 import Producto from "./pages/Producto.tsx";
 import Categoria from "./pages/Categoria.tsx";
 import Perfil from "./pages/Perfil.tsx";
 import Carrito from "./pages/Carrito.tsx";
-import Pedidos from "./pages/Pedidos.tsx";
 import Cancelar from "./pages/Cancelar.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Tiendas from "./pages/Tiendas.tsx";
@@ -17,9 +17,13 @@ import Envios from "./pages/Envios.tsx";
 import Servicio from "./pages/Servicio.tsx";
 import Favorito from "./pages/Favorito.tsx";
 import Contacto from "./pages/Contacto.tsx";
-import EditProfile from "./ui/EditProfile.tsx"; // Nueva página para editar perfil
-import AddAddress from "./ui/AddAddress.tsx"; // Nueva página para agregar dirección
+import Success from "./pages/Success.tsx";
+import EditProfile from "./ui/EditProfile.tsx";
+import AddAddress from "./ui/AddAddress.tsx";
 import AcercaDeNosotros from "./pages/Info.tsx";
+import { disableConsoleInProduction } from '../utils/disableConsole.ts';
+
+disableConsoleInProduction(); 
 
 const RouterLayout = () => {
   return (
@@ -48,11 +52,11 @@ const router = createBrowserRouter([
       },
       {
         path: "/perfil/editar",
-        element: <EditProfile />, // Nueva ruta para editar perfil
+        element: <EditProfile />, 
       },
       {
         path: "/perfil/direccion",
-        element: <AddAddress />, // Nueva ruta para agregar dirección
+        element: <AddAddress />, 
       },
       {
         path: "/productos",
@@ -66,10 +70,7 @@ const router = createBrowserRouter([
         path: "/favorito",
         element: <Favorito />,
       },
-      {
-        path: "/pedidos",
-        element: <Pedidos />,
-      },
+     
       {
         path: "/categorias",
         element: <Categoria />,
@@ -81,6 +82,10 @@ const router = createBrowserRouter([
       {
         path: "/cancelar",
         element: <Cancelar />,
+      },
+      {
+        path: "/success",
+        element: <Success />,
       },
       {
         path: "*",
@@ -103,15 +108,20 @@ const router = createBrowserRouter([
         element: <Servicio />,
       },
       {
-        path: "/Acerca de Nosotros",
+        path: "/acerca-de-nosotros",
         element: <AcercaDeNosotros />,
       },
+       
+      
     ],
   },
 ]);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <AuthProvider> {/* ✅ Aquí envolvemos toda la app */}
-    <RouterProvider router={router} />
-  </AuthProvider>
+  
+  <ShopifyProvider>
+    <AuthProvider>
+      <RouterProvider router={router} />
+    </AuthProvider>
+  </ShopifyProvider>
 );
