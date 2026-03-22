@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { useEffect, useLayoutEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { config } from "../../config";
 import { Product, CategoryProps } from "../../type";
@@ -10,7 +10,6 @@ import { IoChevronBack, IoChevronForward, IoClose } from "react-icons/io5";
 import { HiAdjustments } from "react-icons/hi";
 import FormatoPrecio from "../ui/FormatoPrecio";
 import AddToCartBtn from "../ui/AddToCartBtn";
-import { productPayment } from "../assets";
 import ProductCard from "../ui/ProductCard";
 import Filters from "../ui/Filtros";
 import SkeletonProductCard from "../ui/SkeletonProductCard";
@@ -47,88 +46,116 @@ interface CategoryWithSubcategories extends CategoryProps {
   subcategorias?: CategoryProps[];
 }
 
+const readSavedProductsViewState = () => {
+  if (typeof window === "undefined") return null;
+
+  const saved = sessionStorage.getItem("productsViewState");
+  if (!saved) return null;
+
+  try {
+    return JSON.parse(saved) as {
+      scrollY?: number;
+      search?: string;
+      page?: number;
+      productId?: number;
+      timestamp?: number;
+    };
+  } catch {
+    return null;
+  }
+};
+
 const Producto = () => {
+  const { id } = useParams<{ id: string }>();
+  const [savedProductsViewState, setSavedProductsViewState] = useState<ReturnType<typeof readSavedProductsViewState>>(() => (!id ? readSavedProductsViewState() : null));
   const [productData, setProductData] = useState<Product | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [totalProducts, setTotalProducts] = useState(0);
-  const [selectedCategory, setSelectedCategory] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState(() => {
+    if (!savedProductsViewState?.search) return "";
+    return new URLSearchParams(savedProductsViewState.search).get("categoria") || "";
+  });
+  const [searchQuery, setSearchQuery] = useState(() => {
+    if (!savedProductsViewState?.search) return "";
+    return new URLSearchParams(savedProductsViewState.search).get("busqueda") || "";
+  });
   const [sortBy, setSortBy] = useState("rating_desc");
   const [loading, setLoading] = useState(false);
   const [imgUrl, setImgUrl] = useState("");
   const [selectedColor, setSelectedColor] = useState<Product["colores"][0] | null>(null);
-  const [priceRange, setPriceRange] = useState<[number, number]>(DEFAULT_PRICE_RANGE);
-  const [offerOnly, setOfferOnly] = useState(false);
-  const [stockOnly, setStockOnly] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [priceRange, setPriceRange] = useState<[number, number]>(() => {
+    if (!savedProductsViewState?.search) return DEFAULT_PRICE_RANGE;
+    const params = new URLSearchParams(savedProductsViewState.search);
+    return [
+      params.get("precioMin") ? Number(params.get("precioMin")) : DEFAULT_PRICE_RANGE[0],
+      params.get("precioMax") ? Number(params.get("precioMax")) : DEFAULT_PRICE_RANGE[1]
+    ];
+  });
+  const [offerOnly, setOfferOnly] = useState(() => {
+    if (!savedProductsViewState?.search) return false;
+    const params = new URLSearchParams(savedProductsViewState.search);
+    return params.get("oferta") === "1" || params.get("oferta") === "true";
+  });
+  const [stockOnly, setStockOnly] = useState(() => {
+    if (!savedProductsViewState?.search) return false;
+    const params = new URLSearchParams(savedProductsViewState.search);
+    return params.get("stock") === "1" || params.get("stock") === "true";
+  });
+  const [currentPage, setCurrentPage] = useState(() => savedProductsViewState?.page || 1);
   const [categorySelected, setCategorySelected] = useState<CategoryProps | null>(null);
   const [categories, setCategories] = useState<CategoryWithSubcategories[]>([]);
 
-  const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const navigate = useNavigate();
 
   const requestAbortRef = useRef<AbortController | null>(null);
+  const previousIdRef = useRef<string | undefined>(id);
+  const restorationHandledRef = useRef(false);
 
-  // Flag que indica si estamos restaurando estado desde sessionStorage (para saltarnos el Loading)
-  const [isRestoringState, setIsRestoringState] = useState(() => {
-    return !id && !!sessionStorage.getItem('productsViewState');
-  });
+  const [isRestoringState, setIsRestoringState] = useState(() => !!savedProductsViewState && !id);
 
-  // Deshabilitar restauración automática del navegador
   useEffect(() => {
-    if ('scrollRestoration' in window.history) {
-      window.history.scrollRestoration = 'manual';
-      return () => { window.history.scrollRestoration = 'auto'; };
+    if (typeof window === "undefined") return;
+
+    const previousScrollRestoration = window.history.scrollRestoration;
+    if ("scrollRestoration" in window.history) {
+      window.history.scrollRestoration = "manual";
     }
+
+    return () => {
+      if ("scrollRestoration" in window.history) {
+        window.history.scrollRestoration = previousScrollRestoration;
+      }
+    };
   }, []);
 
-  // Restaurar filtros desde sessionStorage al volver de detalle
   useEffect(() => {
-    if (id || !isRestoringState) return;
-    try {
-      const saved = sessionStorage.getItem('productsViewState');
-      if (!saved) { setIsRestoringState(false); return; }
-      const obj = JSON.parse(saved);
-      const params = new URLSearchParams(obj.search || '');
+    const wasDetailPage = !!previousIdRef.current;
+    const isReturningToList = wasDetailPage && !id;
 
-      const savedBusqueda = params.get('busqueda') || '';
-      const savedCategoria = params.get('categoria') || '';
-      const savedPrecioMin = params.get('precioMin') ? Number(params.get('precioMin')) : DEFAULT_PRICE_RANGE[0];
-      const savedPrecioMax = params.get('precioMax') ? Number(params.get('precioMax')) : DEFAULT_PRICE_RANGE[1];
-      const savedPage = params.get('page') ? Number(params.get('page')) : 1;
+    if (isReturningToList) {
+      restorationHandledRef.current = false;
+      const restoredState = readSavedProductsViewState();
+      setSavedProductsViewState(restoredState);
+      setIsRestoringState(!!restoredState);
 
-      if (savedBusqueda) setSearchQuery(savedBusqueda);
-      if (savedCategoria) setSelectedCategory(savedCategoria);
-      setPriceRange([savedPrecioMin, savedPrecioMax]);
-      setCurrentPage(savedPage);
-    } catch (e) {
-      setIsRestoringState(false);
-    }
-  }, [id, isRestoringState]);
-
-  // Restaurar scroll cuando los productos estén listos
-  useEffect(() => {
-    if (id || !isRestoringState || loading || filteredProducts.length === 0) return;
-    try {
-      const saved = sessionStorage.getItem('productsViewState');
-      if (!saved) { setIsRestoringState(false); return; }
-      const obj = JSON.parse(saved);
-      if (obj.scrollY) {
-        requestAnimationFrame(() => {
-          window.scrollTo({ top: obj.scrollY, behavior: 'instant' as ScrollBehavior });
-          sessionStorage.removeItem('productsViewState');
-          setIsRestoringState(false);
-        });
-      } else {
-        sessionStorage.removeItem('productsViewState');
-        setIsRestoringState(false);
+      if (restoredState?.search) {
+        const params = new URLSearchParams(restoredState.search);
+        setSelectedCategory(params.get("categoria") || "");
+        setSearchQuery(params.get("busqueda") || "");
+        setPriceRange([
+          params.get("precioMin") ? Number(params.get("precioMin")) : DEFAULT_PRICE_RANGE[0],
+          params.get("precioMax") ? Number(params.get("precioMax")) : DEFAULT_PRICE_RANGE[1]
+        ]);
+        setOfferOnly(params.get("oferta") === "1" || params.get("oferta") === "true");
+        setStockOnly(params.get("stock") === "1" || params.get("stock") === "true");
+        setCurrentPage(restoredState.page || 1);
       }
-    } catch (e) {
-      setIsRestoringState(false);
     }
-  }, [id, isRestoringState, loading, filteredProducts.length]);
+
+    previousIdRef.current = id;
+  }, [id]);
 
   const totalPages = Math.max(1, Math.ceil(totalProducts / ITEMS_PER_PAGE));
 
@@ -335,7 +362,7 @@ const Producto = () => {
 
   // ─── Detecta cambios en URL ───────────────────────────────────────────────
   useEffect(() => {
-    if (id || isRestoringState) return;
+    if (id) return;
 
     const { categoria, busqueda, precioMin, precioMax, oferta, stock } = getUrlParams();
     setSelectedCategory(categoria);
@@ -343,7 +370,6 @@ const Producto = () => {
     setPriceRange([precioMin, precioMax]);
     setOfferOnly(!!oferta);
     setStockOnly(!!stock);
-    setCurrentPage(1);
   }, [location.search, getUrlParams, id]);
 
   // ─── Carga de productos paginados con filtros en servidor ────────────────
@@ -352,6 +378,27 @@ const Producto = () => {
     fetchProducts(currentPage);
   }, [id, currentPage, fetchProducts]);
 
+  useLayoutEffect(() => {
+    if (id || !isRestoringState || restorationHandledRef.current || loading || filteredProducts.length === 0) return;
+
+    const savedProductId = savedProductsViewState?.productId;
+    const productAnchor = savedProductId
+      ? document.querySelector(`[data-product-id="${savedProductId}"]`)
+      : null;
+
+    if (productAnchor instanceof HTMLElement) {
+      const elementTop = productAnchor.getBoundingClientRect().top + window.pageYOffset;
+      window.scrollTo({ top: Math.max(elementTop - 72, 0), behavior: "auto" });
+    } else {
+      const scrollY = savedProductsViewState?.scrollY || 0;
+      window.scrollTo({ top: scrollY, behavior: "auto" });
+    }
+
+    setIsRestoringState(false);
+    restorationHandledRef.current = true;
+    sessionStorage.removeItem("productsViewState");
+  }, [id, isRestoringState, loading, filteredProducts.length, savedProductsViewState]);
+
   // ─── Reordenar resultados actuales sin recargar API ──────────────────────
   useEffect(() => {
     if (id || filteredProducts.length === 0) return;
@@ -359,8 +406,8 @@ const Producto = () => {
   }, [sortBy, id, applySort]);
 
   // ─── Scroll al top al ver producto individual ─────────────────────────────
-  useEffect(() => {
-    if (id) window.scrollTo({ top: 0, behavior: 'smooth' });
+  useLayoutEffect(() => {
+    if (id) window.scrollTo({ top: 0, behavior: 'auto' });
   }, [id]);
 
   // ─── Resuelve la categoría seleccionada en el árbol ───────────────────────
@@ -415,22 +462,6 @@ const Producto = () => {
     }
 
     navigate(`/productos${params.toString() ? `?${params.toString()}` : ""}`);
-    setCurrentPage(1);
-  }, [location.search, navigate]);
-
-  const handleToggleOffer = useCallback((value: boolean) => {
-    const params = new URLSearchParams(location.search);
-    if (value) params.set("oferta", "1"); else params.delete("oferta");
-    navigate(`/productos${params.toString() ? `?${params.toString()}` : ""}`);
-    setOfferOnly(value);
-    setCurrentPage(1);
-  }, [location.search, navigate]);
-
-  const handleToggleStock = useCallback((value: boolean) => {
-    const params = new URLSearchParams(location.search);
-    if (value) params.set("stock", "1"); else params.delete("stock");
-    navigate(`/productos${params.toString() ? `?${params.toString()}` : ""}`);
-    setStockOnly(value);
     setCurrentPage(1);
   }, [location.search, navigate]);
 
@@ -525,7 +556,7 @@ const Producto = () => {
   const hasLista2Price = productData?.lista2 && productData.lista2 > 0;
   const showLista2 = isLista2Active && hasLista2Price;
 
-  if (loading && !isRestoringState) return <Loading />;
+  if (loading && !id && filteredProducts.length === 0 && !isRestoringState) return <Loading />;
 
   // ─── VISTA INDIVIDUAL DEL PRODUCTO ───────────────────────────────────────
   if (id && productData) {
@@ -776,7 +807,7 @@ const Producto = () => {
               </div>
             </div>
 
-            {loading ? (
+            {loading && filteredProducts.length === 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-3 lg:gap-4">
                 {Array.from({ length: 12 }).map((_, i) => (
                   <div key={i} className="group">

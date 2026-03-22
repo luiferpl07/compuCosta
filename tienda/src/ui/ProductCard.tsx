@@ -41,17 +41,20 @@ const ProductCard = ({ item, setSearchText }: Props) => {
       document.body.scrollTop,
       0
     );
+
     try {
       const viewState = {
         scrollY,
         search: window.location.search || "",
+        page: 1,
+        productId: item.idproducto,
         timestamp: Date.now()
       };
-      sessionStorage.setItem('productsViewState', JSON.stringify(viewState));
-    } catch (e) {
-      // ignore
+      sessionStorage.setItem("productsViewState", JSON.stringify(viewState));
+    } catch {
+      // ignore storage failures
     }
-    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+
     navigation(`/productos/${item.idproducto}`);
   };
 
@@ -61,15 +64,6 @@ const ProductCard = ({ item, setSearchText }: Props) => {
     (item.reviews?.length > 0
       ? item.reviews.reduce((acc: number, rev: any) => acc + rev.calificacion, 0) / item.reviews.length
       : 0);
-
-  console.log('⭐ ProductCard - Datos de reseñas:', {
-    nombre: item.nombreproducto,
-    reseñasCount: item.reseñasCount,
-    puntuacionPromedio: item.puntuacionPromedio,
-    reviewsLength: item.reviews?.length,
-    reviewCount,
-    averageRating
-  });
 
   // Función para obtener SOLO la categoría más específica (subcategoría)
   const getCategoriesDisplay = (categorias: any) => {
@@ -117,7 +111,7 @@ const ProductCard = ({ item, setSearchText }: Props) => {
   };
 
   return (
-    <div className="border border-gray-200 rounded-lg p-1 overflow-hidden hover:border-amber-300 duration-200 cursor-pointer relative">
+    <div data-product-id={item.idproducto} className="border border-gray-200 rounded-lg p-1 overflow-hidden hover:border-amber-300 duration-200 cursor-pointer relative">
       <div className="w-full h-60 relative p-2 group">
         {/* Badge de descuento */}
         {showLista2 && percentage > 0 && item.lista2 > item.lista1 && (
@@ -141,14 +135,25 @@ const ProductCard = ({ item, setSearchText }: Props) => {
         <ProductCardSideNav product={item} />
       </div>
 
-      <div className="flex flex-col gap-2 px-2 pb-2">
-        <h3 className="text-xs uppercase font-semibold text-textoNegro/70">
+      <div
+        className="flex flex-col gap-2 px-2 pb-2"
+        onClick={handleProduct}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            handleProduct();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+      >
+        <h3 className="text-xs uppercase font-semibold text-textoNegro/70 cursor-pointer">
           {getCategoriesDisplay(item.categorias)}
         </h3>
-        <h2 className="text-lg font-bold line-clamp-2">{item?.nombreproducto || 'Producto sin nombre'}</h2>
+        <h2 className="text-lg font-bold line-clamp-2 cursor-pointer">{item?.nombreproducto || 'Producto sin nombre'}</h2>
 
         {/* ✅ SECCIÓN DE RATING MEJORADA */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 cursor-pointer">
           <div className="flex items-center text-base text-textoRojo">
             {[...Array(5)].map((_, index) => {
               const ratingValue = index + 1;
