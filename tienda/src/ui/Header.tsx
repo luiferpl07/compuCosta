@@ -12,6 +12,7 @@ import { getData } from "../lib";
 import { CategoryProps, Product } from "../../type";
 import ProductCard from "./ProductCard";
 import { store } from "../lib/store";
+import { useAuth } from "../context/AuthContext";
 
 const bottomNavigation = [
   { title: "INICIO", link: "/", icon: <HiOutlineSparkles className="w-4 h-4" /> },
@@ -46,7 +47,10 @@ const Header = () => {
   const searchAbortRef = useRef<AbortController | null>(null);
 
   const navigate = useNavigate();
+  const { currentUser: authCurrentUser } = useAuth();
   const { cartProduct, favoriteProduct, currentUser } = store();
+  const sessionUser = authCurrentUser || currentUser;
+  const userDisplayName = `${sessionUser?.firstName || ""} ${sessionUser?.lastName || ""}`.trim();
 
   // ─── Organizar categorías desde API ──────────────────────────────────────
   const organizeCategoriesFromAPI = (categoryData: CategoryProps[]): CategoryWithSubcategories[] => {
@@ -147,9 +151,6 @@ const Header = () => {
           `${config?.baseUrl}${config?.apiPrefix}/products?${params.toString()}`,
           {
             signal: controller.signal,
-            headers: {
-              "Content-Type": "application/json",
-            },
           }
         );
 
@@ -354,36 +355,40 @@ const Header = () => {
         </button>
 
         {/* Iconos usuario / favoritos / carrito */}
-        <div className="flex items-center gap-x-3 sm:gap-x-4 md:gap-x-5 lg:gap-x-6 text-xl sm:text-2xl md:text-2xl">
-          <Link to={"/perfil"} className="group relative hover:text-textoRojo transition-all duration-300 p-2 rounded-xl hover:bg-red-50">
-            {currentUser ? (
-              <img
-                src={currentUser?.avatar}
-                alt="profileImg"
-                className="w-7 h-7 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-full object-cover
-                  ring-2 ring-transparent group-hover:ring-textoRojo group-hover:scale-110
-                  transition-all duration-300 shadow-sm"
-              />
-            ) : (
-              <FiUser className="group-hover:scale-110 transition-transform duration-200" />
-            )}
+        <div className="flex items-center gap-x-2 sm:gap-x-3 md:gap-x-4 lg:gap-x-5 text-xl sm:text-2xl">
+          {sessionUser && (
+            <Link
+              to={"/perfil"}
+              className="hidden xl:inline-flex items-center rounded-full border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-semibold text-textoRojo hover:bg-red-100 transition-colors duration-200 whitespace-nowrap overflow-hidden max-w-[150px]"
+              title={userDisplayName || "Mi perfil"}
+            >
+              <span className="truncate">Hola, {sessionUser.firstName || "Usuario"}</span>
+            </Link>
+          )}
+
+          <Link
+            to={"/perfil"}
+            title={userDisplayName || "Mi perfil"}
+            className="group relative hover:text-textoRojo transition-all duration-300 p-1.5 sm:p-2 rounded-xl hover:bg-red-50 flex-shrink-0"
+          >
+            <FiUser className="w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 text-gray-800 group-hover:text-textoRojo transition-all duration-200" />
           </Link>
 
-          <Link to={"/favorito"} className="group relative hover:text-textoRojo transition-all duration-300 p-2 rounded-xl hover:bg-red-50">
+          <Link to={"/favorito"} className="group relative hover:text-textoRojo transition-all duration-300 p-1.5 sm:p-2 rounded-xl hover:bg-red-50 flex-shrink-0">
             <FiStar className="group-hover:scale-110 transition-transform duration-200" />
             <span className="inline-flex items-center justify-center bg-gradient-to-r from-textoAmarillo to-yellow-400
-              text-white absolute -top-1 -right-1 text-[9px] sm:text-[10px]
-              rounded-full w-4 h-4 sm:w-5 sm:h-5 font-bold shadow-sm ring-2 ring-white
+              text-white absolute -top-0.5 -right-0.5 text-[8px] sm:text-[9px]
+              rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold shadow-sm ring-1 ring-white
               group-hover:scale-110 transition-transform duration-200">
               {favoriteProduct?.length > 0 ? favoriteProduct.length : "0"}
             </span>
           </Link>
 
-          <Link to={"/carrito"} className="group relative hover:text-textoRojo transition-all duration-300 p-2 rounded-xl hover:bg-red-50">
+          <Link to={"/carrito"} className="group relative hover:text-textoRojo transition-all duration-300 p-1.5 sm:p-2 rounded-xl hover:bg-red-50 flex-shrink-0">
             <FiShoppingCart className="group-hover:scale-110 transition-transform duration-200" />
             <span className="inline-flex items-center justify-center bg-gradient-to-r from-textoRojo to-red-600
-              text-white absolute -top-1 -right-1 text-[9px] sm:text-[10px]
-              rounded-full w-4 h-4 sm:w-5 sm:h-5 font-bold shadow-sm ring-2 ring-white
+              text-white absolute -top-0.5 -right-0.5 text-[8px] sm:text-[9px]
+              rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold shadow-sm ring-1 ring-white
               group-hover:scale-110 transition-transform duration-200">
               {cartProduct?.length > 0 ? cartProduct.length : "0"}
             </span>
@@ -427,13 +432,9 @@ const Header = () => {
           text-black shadow-2xl border-t border-gray-200 backdrop-blur-sm search-results">
 
           {isSearching ? (
-            <div className="py-8 sm:py-12 w-full flex flex-col items-center justify-center">
-              <div className="relative">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 border-4 border-gray-200 rounded-full
-                  border-t-textoRojo animate-spin mb-4"></div>
-              </div>
-              <p className="text-lg sm:text-xl text-gray-600 font-medium">Buscando productos...</p>
-              <p className="text-sm text-gray-400 mt-1">Encontrando las mejores opciones para ti</p>
+            <div className="py-6 sm:py-8 w-full flex flex-col items-center justify-center">
+              <div className="w-8 h-8 border-2 border-gray-200 rounded-full border-t-textoRojo animate-spin mb-3"></div>
+              <p className="text-sm sm:text-base text-gray-600 font-medium">Buscando productos...</p>
             </div>
           ) : filteredProducts.length > 0 ? (
             <>

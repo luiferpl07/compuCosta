@@ -26,6 +26,11 @@ const Filters = ({
   const [tempPriceRange, setTempPriceRange] = useState<[number, number]>([0, MAX_PRICE]);
   const [categorySelected, setCategorySelected] = useState<CategoryProps | null>(null);
 
+  // Sincronizar tempPriceRange cuando priceRange cambia desde la URL o props
+  useEffect(() => {
+    setTempPriceRange(priceRange);
+  }, [priceRange]);
+
   // SOLO cargar categorías (no productos)
   useEffect(() => {
     const fetchCategories = async () => {

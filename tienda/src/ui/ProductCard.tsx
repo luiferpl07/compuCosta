@@ -37,7 +37,6 @@ const ProductCard = ({ item, setSearchText }: Props) => {
     console.log('🔗 Navegando a producto:', item.idproducto, item.nombreproducto);
     window.scrollTo({ top: 0, behavior: 'auto' });
     navigation(`/productos/${item.idproducto}`);
-    setSearchText?.("");
   };
 
   // ✅ SOLUCIÓN: Obtener datos de reseñas de múltiples fuentes posibles

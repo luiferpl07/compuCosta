@@ -74,7 +74,9 @@ const Producto = () => {
     const urlParams = new URLSearchParams(location.search);
     return {
       categoria: urlParams.get('categoria') || '',
-      busqueda: urlParams.get('busqueda') || ''
+      busqueda: urlParams.get('busqueda') || '',
+      precioMin: urlParams.get('precioMin') ? Number(urlParams.get('precioMin')) : 0,
+      precioMax: urlParams.get('precioMax') ? Number(urlParams.get('precioMax')) : MAX_PRICE
     };
   }, [location.search]);
 
@@ -263,9 +265,10 @@ const Producto = () => {
   useEffect(() => {
     if (id) return;
 
-    const { categoria, busqueda } = getUrlParams();
+    const { categoria, busqueda, precioMin, precioMax } = getUrlParams();
     setSelectedCategory(categoria);
     setSearchQuery(busqueda);
+    setPriceRange([precioMin, precioMax]);
     setCurrentPage(1);
   }, [location.search, getUrlParams, id]);
 
@@ -325,9 +328,22 @@ const Producto = () => {
   }, [location.search, navigate]);
 
   const handlePriceRangeChange = useCallback((range: [number, number]) => {
-    setPriceRange(range);
+    const params = new URLSearchParams(location.search);
+    if (range[0] > 0) {
+      params.set("precioMin", range[0].toString());
+    } else {
+      params.delete("precioMin");
+    }
+
+    if (range[1] < MAX_PRICE) {
+      params.set("precioMax", range[1].toString());
+    } else {
+      params.delete("precioMax");
+    }
+
+    navigate(`/productos${params.toString() ? `?${params.toString()}` : ""}`);
     setCurrentPage(1);
-  }, []);
+  }, [location.search, navigate]);
 
   // ─── Imagen y color inicial del producto individual ───────────────────────
   useEffect(() => {
