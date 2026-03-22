@@ -1,4 +1,4 @@
-import { useEffect, useState, useDeferredValue, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { logo } from "../assets";
 import { IoClose, IoMenu, IoGridOutline } from "react-icons/io5";
 import { FiShoppingCart, FiStar, FiUser } from "react-icons/fi";
@@ -41,11 +41,9 @@ const Header = () => {
   const [showMobileCategories, setShowMobileCategories] = useState(false);
   const [activeCategory, setActiveCategory] = useState<number | null>(null);
 
-  const deferredSearch = useDeferredValue(searchText);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  // Ref para guardar caché de todos los productos y evitar re-fetches
-  const cachedProductsRef = useRef<Product[] | null>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
 
   const navigate = useNavigate();
   const { cartProduct, favoriteProduct, currentUser } = store();
@@ -99,26 +97,16 @@ const Header = () => {
     return () => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
       if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+      if (searchAbortRef.current) {
+        searchAbortRef.current.abort();
+        searchAbortRef.current = null;
+      }
     };
   }, []);
 
-  // ─── Puntuación de relevancia ─────────────────────────────────────────────
-  const scoreProduct = (product: Product, terms: string[]): number => {
-    const nombre = product.nombreproducto.toLowerCase();
-    let score = 0;
-    terms.forEach(term => {
-      if (nombre === term) score += 100;
-      else if (nombre.startsWith(term)) score += 60;
-      else if (nombre.includes(` ${term}`)) score += 40;
-      else if (nombre.includes(term)) score += 20;
-      if (product.descripcion?.toLowerCase().includes(term)) score += 5;
-    });
-    return score;
-  };
-
-  // ─── Búsqueda Perezosa (Lazy Loading & Debounce Único) ───────────────────
+  // ─── Búsqueda server-side con debounce y abort ────────────────────────────
   useEffect(() => {
-    const query = deferredSearch.toLowerCase().trim();
+    const query = searchText.toLowerCase().trim();
     
     // Auto-limpiar búsqueda caracteres extraños básicos
     const sanitizedQuery = query.replace(/[<>{}\\]/g, "");
@@ -134,60 +122,67 @@ const Header = () => {
 
     searchTimeoutRef.current = setTimeout(async () => {
       try {
-        let activeProducts = cachedProductsRef.current;
-        
-        // Cargar productos SOLO si no están cacheados
-        if (!activeProducts) {
-          let allProductsData: Product[] = [];
-          let cursor: number | null = null;
-          
-          do {
-            const url = `${config?.baseUrl}${config?.apiPrefix}/products?limit=100${cursor ? `&cursor=${cursor}` : ""}`;
-            const res = await getData(url);
-            const page = res?.productos || [];
-            allProductsData = [...allProductsData, ...page];
-            cursor = res?.nextCursor ?? null;
-          } while (cursor !== null);
-          
-          activeProducts = allProductsData.filter(
-            (p) => p.activo === true && (p.cantidad || 0) > 0
-          );
-          cachedProductsRef.current = activeProducts; // Guardar cache en memoria
+        if (searchAbortRef.current) {
+          searchAbortRef.current.abort();
         }
+
+        const controller = new AbortController();
+        searchAbortRef.current = controller;
 
         const terms = sanitizedQuery.split(/\s+/).filter(t => t.length >= 2);
         if (terms.length === 0) {
           setFilteredProducts([]);
+          setIsSearching(false);
           return;
         }
 
-        // Búsqueda simple: todos los términos deben coincidir con nombre o descripción (AND y Scoring)
-        const candidates = activeProducts
-          .filter(p => {
-             const nombre = p.nombreproducto.toLowerCase();
-             const desc = (p.descripcion || "").toLowerCase();
-             return terms.every(term => nombre.includes(term) || desc.includes(term));
-          })
-          .sort((a, b) => {
-             const scoreA = scoreProduct(a, terms);
-             const scoreB = scoreProduct(b, terms);
-             if (scoreB !== scoreA) return scoreB - scoreA;
-             return (b.puntuacionPromedio || 0) - (a.puntuacionPromedio || 0);
-          })
-          .slice(0, 10);
+        const params = new URLSearchParams();
+        params.set("page", "1");
+        params.set("limit", "10");
+        params.set("search", sanitizedQuery);
+        params.set("visibilidad", "visibles");
+        params.set("cantidadMin", "1");
+
+        const response = await fetch(
+          `${config?.baseUrl}${config?.apiPrefix}/products?${params.toString()}`,
+          {
+            signal: controller.signal,
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`Error HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (searchAbortRef.current !== controller) return;
+
+        const candidates: Product[] = Array.isArray(data?.productos)
+          ? data.productos.slice(0, 10)
+          : [];
 
         setFilteredProducts(candidates);
       } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
         setFilteredProducts([]);
       } finally {
         setIsSearching(false);
       }
-    }, 300); // Un solo delay de debounce
+    }, 400);
 
     return () => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+      if (searchAbortRef.current) {
+        searchAbortRef.current.abort();
+      }
     };
-  }, [deferredSearch]);
+  }, [searchText]);
 
   // ─── Handlers de hover para mega menú ────────────────────────────────────
   const handleMouseEnter = () => {

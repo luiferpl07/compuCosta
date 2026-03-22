@@ -1,12 +1,10 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
-import { useParams, useLocation, useNavigate, Link  } from "react-router-dom";
+import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { config } from "../../config";
 import { Product, CategoryProps } from "../../type";
 import { getData } from "../lib";
 import Loading from "../ui/Loading";
 import Container from "../ui/Container";
-import PriceTag from "../ui/PriceTag";
-import { FaRegEye, FaFilter } from "react-icons/fa";
 import { MdStar, MdStarHalf, MdOutlineStarOutline } from "react-icons/md";
 import { IoChevronBack, IoChevronForward, IoClose } from "react-icons/io5";
 import { HiAdjustments } from "react-icons/hi";
@@ -32,36 +30,45 @@ interface Review {
 }
 
 const ITEMS_PER_PAGE = 28;
+const MAX_PRICE = 20000000;
+const DEFAULT_PRICE_RANGE: [number, number] = [0, MAX_PRICE];
+
+interface ProductsApiResponse {
+  productos: Product[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasMore: boolean;
+}
+
+interface CategoryWithSubcategories extends CategoryProps {
+  subcategorias?: CategoryProps[];
+}
 
 const Producto = () => {
   const [productData, setProductData] = useState<Product | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [totalProducts, setTotalProducts] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("rating_desc");
   const [loading, setLoading] = useState(false);
   const [imgUrl, setImgUrl] = useState("");
   const [selectedColor, setSelectedColor] = useState<Product["colores"][0] | null>(null);
-  const [priceRange, setPriceRange] = useState<[number, number]>([0, 20000000]);
+  const [priceRange, setPriceRange] = useState<[number, number]>(DEFAULT_PRICE_RANGE);
   const [currentPage, setCurrentPage] = useState(1);
   const [categorySelected, setCategorySelected] = useState<CategoryProps | null>(null);
-  const [categories, setCategories] = useState<CategoryProps[]>([]);
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [categories, setCategories] = useState<CategoryWithSubcategories[]>([]);
   
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const navigate = useNavigate();
 
-  const isInitializedRef = useRef(false);
+  const requestAbortRef = useRef<AbortController | null>(null);
 
-  const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
-
-  const getCurrentPageProducts = () => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    return filteredProducts.slice(startIndex, endIndex);
-  };
+  const totalPages = Math.max(1, Math.ceil(totalProducts / ITEMS_PER_PAGE));
 
   const getUrlParams = useCallback(() => {
     const urlParams = new URLSearchParams(location.search);
@@ -71,166 +78,208 @@ const Producto = () => {
     };
   }, [location.search]);
 
-  // ─── Reset ref al desmontar para permitir recarga al volver ───────────────
+  const getCategoriaApiValue = useCallback((slug: string): string | null => {
+    if (!slug || categories.length === 0) return null;
+
+    const parent = categories.find((cat) => cat.slug === slug);
+    if (parent) return parent.nombre;
+
+    for (const cat of categories) {
+      const child = cat.subcategorias?.find((sub) => sub.slug === slug);
+      if (child) return `${cat.nombre} → ${child.nombre}`;
+    }
+
+    return null;
+  }, [categories]);
+
+  const applySort = useCallback((products: Product[]) => {
+    const sorted = [...products];
+    sorted.sort((a, b) => {
+      switch (sortBy) {
+        case "name_asc":
+          return a.nombreproducto.localeCompare(b.nombreproducto);
+        case "name_desc":
+          return b.nombreproducto.localeCompare(a.nombreproducto);
+        case "price_asc":
+          return (a.lista1 || 0) - (b.lista1 || 0);
+        case "price_desc":
+          return (b.lista1 || 0) - (a.lista1 || 0);
+        case "rating_desc":
+          return (b.puntuacionPromedio || 0) - (a.puntuacionPromedio || 0);
+        default:
+          return 0;
+      }
+    });
+    return sorted;
+  }, [sortBy]);
+
+  const fetchProducts = useCallback(async (pageToLoad: number) => {
+    if (id) return;
+
+    if (requestAbortRef.current) {
+      requestAbortRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    requestAbortRef.current = controller;
+
+    try {
+      setLoading(true);
+
+      const params = new URLSearchParams();
+      params.set("page", pageToLoad.toString());
+      params.set("limit", ITEMS_PER_PAGE.toString());
+      params.set("visibilidad", "visibles");
+      params.set("cantidadMin", "1");
+
+      if (searchQuery.trim()) {
+        params.set("search", searchQuery.trim());
+      }
+
+      const categoriaApi = getCategoriaApiValue(selectedCategory);
+      if (selectedCategory && categoriaApi) {
+        params.set("categoria", categoriaApi);
+      }
+
+      if (priceRange[0] > DEFAULT_PRICE_RANGE[0]) {
+        params.set("precioMin", priceRange[0].toString());
+      }
+
+      if (priceRange[1] < DEFAULT_PRICE_RANGE[1]) {
+        params.set("precioMax", priceRange[1].toString());
+      }
+
+      const response = await fetch(
+        `${config?.baseUrl}${config?.apiPrefix}/products?${params.toString()}`,
+        {
+          signal: controller.signal,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Error HTTP ${response.status}`);
+      }
+
+      const data: ProductsApiResponse = await response.json();
+
+      if (requestAbortRef.current !== controller) return;
+
+      setFilteredProducts(applySort(data.productos || []));
+      setTotalProducts(data.total || 0);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+
+      console.error("❌ Error al cargar productos:", error);
+      toast.error("Error al cargar los productos");
+      setFilteredProducts([]);
+      setTotalProducts(0);
+    } finally {
+      if (requestAbortRef.current === controller) {
+        setLoading(false);
+      }
+    }
+  }, [id, searchQuery, selectedCategory, priceRange, getCategoriaApiValue, applySort]);
+
   useEffect(() => {
     return () => {
-      isInitializedRef.current = false;
+      if (requestAbortRef.current) {
+        requestAbortRef.current.abort();
+        requestAbortRef.current = null;
+      }
     };
   }, []);
 
-  // ─── EFFECT PRINCIPAL - Carga inicial de datos ────────────────────────────
+  // ─── Carga de detalle de producto ─────────────────────────────────────────
   useEffect(() => {
-    const fetchInitialData = async () => {
+    if (!id) {
+      setProductData(null);
+      setReviews([]);
+      return;
+    }
+
+    const fetchProductData = async () => {
       try {
         setLoading(true);
-        
-        if (id) {
-          // ── VISTA INDIVIDUAL ──────────────────────────────────────────────
-          setProductData(null);
-          setReviews([]);
-          setImgUrl("");
-          setSelectedColor(null);
-          
-          const data = await getData(`${config?.baseUrl}${config?.apiPrefix}/products/${id}`);
-          
-          if (data && (!data.activo || (data.cantidad || 0) <= 0)) {
-            navigate('/productos');
-            toast.error('Este producto no está disponible o está agotado');
-            return;
-          }
-          
-          setProductData(data);
+        setImgUrl("");
+        setSelectedColor(null);
 
-          const reviewsResponse = await getData(`${config?.baseUrl}${config?.apiPrefix}/reviews?productId=${id}`);
-          if (Array.isArray(reviewsResponse)) {
-            const filteredReviews = reviewsResponse.filter(review => review.id_producto === Number(id));
-            setReviews(filteredReviews);
-          }
+        const data = await getData(`${config?.baseUrl}${config?.apiPrefix}/products/${id}`);
 
-        } else if (!isInitializedRef.current) {
-          console.log('📄 Cargando datos del listado...');
+        if (data && (!data.activo || (data.cantidad || 0) <= 0)) {
+          navigate('/productos');
+          toast.error('Este producto no está disponible o está agotado');
+          return;
+        }
 
-          // ── FIX: Loop paginado para traer TODOS los productos ─────────────
-          let productsData: any[] = [];
-          let cursor: number | null = null;
+        setProductData(data);
 
-          do {
-            const url = `${config?.baseUrl}${config?.apiPrefix}/products?limit=100${cursor ? `&cursor=${cursor}` : ""}`;
-            const res = await getData(url);
-            const page = res?.productos || [];
-            productsData = [...productsData, ...page];
-            cursor = res?.nextCursor ?? null;
-            console.log(`📦 Página cargada: ${page.length} productos | Total acumulado: ${productsData.length} | hasMore: ${res?.hasMore}`);
-          } while (cursor !== null);
-
-          // Cargar categorías y reseñas en paralelo (ya tenemos todos los productos)
-          const [categoriesData, allReviewsData] = await Promise.all([
-            getData(`${config?.baseUrl}${config?.apiPrefix}/categories`),
-            fetch(`${config?.baseUrl}${config?.apiPrefix}/reviews`, {
-              cache: 'no-store'
-            }).then(res => res.json())
-          ]);
-
-          console.log('📦 Datos cargados:', {
-            totalProductos: productsData.length,
-            totalCategorias: categoriesData.length,
-            totalReseñas: allReviewsData.length
-          });
-
-          // Mapa de categorías por slug para búsqueda rápida
-          const categoriasMap = new Map();
-          categoriesData.forEach((cat: CategoryProps) => {
-            categoriasMap.set(cat.slug, cat);
-          });
-
-          // Filtrar solo activos con stock
-          const productosActivos = productsData.filter((product: any) => {
-            const tieneStock = (product.cantidad || 0) > 0;
-            const estaActivo = product.activo === true;
-            return estaActivo && tieneStock;
-          });
-
-          console.log('✅ Productos activos con stock:', productosActivos.length);
-
-          const enhancedProducts = productosActivos.map((product: any) => {
-            const productReviews = Array.isArray(allReviewsData)
-              ? allReviewsData.filter((review: any) =>
-                  Number(review.id_producto) === Number(product.idproducto)
-                )
-              : [];
-
-            const reviewCount = productReviews.length;
-            const averageRating = reviewCount > 0
-              ? productReviews.reduce((acc: number, rev: any) => acc + rev.calificacion, 0) / reviewCount
-              : 0;
-
-            // ── FIX: Preservar el string original de categorías correctamente ──
-            let categoriasAdaptadas: any[] = [];
-            let categoriasRaw: string | null = null;
-
-            if (Array.isArray(product.categorias)) {
-              categoriasAdaptadas = product.categorias;
-            } else if (typeof product.categorias === 'string') {
-              categoriasRaw = product.categorias;
-              categoriasAdaptadas = product.categorias; // string directo al ProductCard
-            }
-
-            return {
-              ...product,
-              categorias: categoriasAdaptadas,
-              _categoriasRaw: categoriasRaw,   // string original del listado
-              _categoriasMap: categoriasMap,    // mapa para resolver slugs
-              enStock: true,
-              reseñasCount: reviewCount,
-              puntuacionPromedio: averageRating,
-              reviews: productReviews.map((rev: any) => ({ calificacion: rev.calificacion })),
-            };
-          });
-
-          // Construir árbol de categorías activas
-          const categoriasActivas = categoriesData.filter((cat: CategoryProps) => cat.activo === true);
-          const parentCategories = categoriasActivas.filter((cat: CategoryProps) => cat.padre_id === null);
-          const childCategories  = categoriasActivas.filter((cat: CategoryProps) => cat.padre_id !== null);
-
-          const categoriesWithSubcategories = parentCategories.map((parent: CategoryProps) => ({
-            ...parent,
-            subcategorias: childCategories.filter((child: CategoryProps) => child.padre_id === parent.id)
-          }));
-
-          setCategories(categoriesWithSubcategories);
-          setAllProducts(enhancedProducts);
-
-          const { categoria } = getUrlParams();
-          if (categoria) {
-            console.log('🎯 Categoría inicial desde URL:', categoria);
-            setSelectedCategory(categoria);
-          } else {
-            setFilteredProducts(enhancedProducts);
-          }
-
-          isInitializedRef.current = true;
+        const reviewsResponse = await getData(`${config?.baseUrl}${config?.apiPrefix}/reviews?productId=${id}`);
+        if (Array.isArray(reviewsResponse)) {
+          const filteredReviews = reviewsResponse.filter(review => review.id_producto === Number(id));
+          setReviews(filteredReviews);
         }
       } catch (error) {
-        console.error("❌ Error al cargar los datos iniciales:", error);
-        toast.error('Error al cargar los productos');
+        console.error("❌ Error al cargar detalle del producto:", error);
+        toast.error('Error al cargar el producto');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchInitialData();
-  }, [id, navigate, getUrlParams]);
+    fetchProductData();
+  }, [id, navigate]);
+
+  // ─── Carga árbol de categorías activas para filtros ──────────────────────
+  useEffect(() => {
+    if (id) return;
+
+    const fetchCategories = async () => {
+      try {
+        const categoriesData = await getData(`${config?.baseUrl}${config?.apiPrefix}/categories`);
+        const categoriasActivas = categoriesData.filter((cat: CategoryProps) => cat.activo === true);
+        const parentCategories = categoriasActivas.filter((cat: CategoryProps) => cat.padre_id === null);
+        const childCategories = categoriasActivas.filter((cat: CategoryProps) => cat.padre_id !== null);
+
+        const categoriesWithSubcategories: CategoryWithSubcategories[] = parentCategories.map((parent: CategoryProps) => ({
+          ...parent,
+          subcategorias: childCategories.filter((child: CategoryProps) => child.padre_id === parent.id),
+        }));
+
+        setCategories(categoriesWithSubcategories);
+      } catch (error) {
+        console.error("❌ Error cargando categorías:", error);
+      }
+    };
+
+    fetchCategories();
+  }, [id]);
 
   // ─── Detecta cambios en URL ───────────────────────────────────────────────
   useEffect(() => {
-    if (!isInitializedRef.current || id) return;
+    if (id) return;
 
-    const { categoria } = getUrlParams();
-    console.log('🔄 URL cambió, actualizando categoría:', categoria);
+    const { categoria, busqueda } = getUrlParams();
     setSelectedCategory(categoria);
+    setSearchQuery(busqueda);
     setCurrentPage(1);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [location.search, getUrlParams, id]);
+
+  // ─── Carga de productos paginados con filtros en servidor ────────────────
+  useEffect(() => {
+    if (id) return;
+    fetchProducts(currentPage);
+  }, [id, currentPage, fetchProducts]);
+
+  // ─── Reordenar resultados actuales sin recargar API ──────────────────────
+  useEffect(() => {
+    if (id || filteredProducts.length === 0) return;
+    setFilteredProducts((prev) => applySort(prev));
+  }, [sortBy, id, applySort]);
 
   // ─── Scroll al top al ver producto individual ─────────────────────────────
   useEffect(() => {
@@ -263,103 +312,20 @@ const Producto = () => {
     setCategorySelected(foundCategory || null);
   }, [selectedCategory, categories]);
 
-  // ─── Aplica filtros y orden ───────────────────────────────────────────────
-  useEffect(() => {
-    if (allProducts.length === 0) {
-      console.log('⏳ Esperando productos...');
-      return;
-    }
-
-    const { busqueda } = getUrlParams();
-
-    console.log('🔍 Aplicando filtros:', {
-      productosDisponibles: allProducts.length,
-      selectedCategory,
-      busqueda,
-      priceRange
-    });
-
-    const sortedAndFiltered = allProducts
-      .filter(product => {
-        // Filtro de búsqueda
-        if (busqueda) {
-          const searchLower = busqueda.toLowerCase();
-          const matchesSearch =
-            product.nombreproducto.toLowerCase().includes(searchLower) ||
-            (product.descripcion && product.descripcion.toLowerCase().includes(searchLower));
-          if (!matchesSearch) return false;
-        }
-
-  
-      if (selectedCategory) {
-        if (Array.isArray(product.categorias) && product.categorias.length > 0) {
-          const belongs = product.categorias.some((pc: any) => {
-            const slugHijo  = pc.categoria?.slug;
-            const slugPadre = pc.categoria?.padre?.slug;
-            return slugHijo === selectedCategory || slugPadre === selectedCategory;
-          });
-          if (!belongs) return false;
-
-        } else if ((product as any)._categoriasRaw) {
-          const raw = (product as any)._categoriasRaw as string;
-          const categoriaSeleccionada = (product as any)._categoriasMap?.get(selectedCategory);
-          if (!categoriaSeleccionada) return false;
-
-          const nombreBuscado = categoriaSeleccionada.nombre.toLowerCase().trim();
-          const esPadre = categoriaSeleccionada.padre_id === null;
-          const rawLower = raw.toLowerCase();
-
-          let coincide = false;
-
-          if (esPadre) {
-            // FIX: regex para padre que puede tener comas en su nombre
-            const regex = new RegExp(`(^|,\\s*)${nombreBuscado.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*(–|→|$|,)`, 'i');
-            coincide = regex.test(rawLower);
-          } else {
-            // Para hijo: buscar el nombre exacto después de un separador
-            const regex = new RegExp(`(–|→)\\s*${nombreBuscado.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*(,|$)`, 'i');
-            coincide = regex.test(rawLower);
-          }
-
-          if (!coincide) return false;
-        } else {
-          return false;
-        }
-      }
-        // Filtro de precio
-        const inPriceRange =
-          (product.lista1 >= priceRange[0] && product.lista1 <= priceRange[1]) ||
-          (product.lista2 >= priceRange[0] && product.lista2 <= priceRange[1]);
-
-        return inPriceRange;
-      })
-      .sort((a, b) => {
-        switch (sortBy) {
-          case "name_asc":  return a.nombreproducto.localeCompare(b.nombreproducto);
-          case "name_desc": return b.nombreproducto.localeCompare(a.nombreproducto);
-          case "price_asc": return (a.lista2 || a.lista1) - (b.lista2 || b.lista1);
-          case "price_desc": return (b.lista2 || b.lista1) - (a.lista2 || a.lista1);
-          case "rating_desc": return (b.puntuacionPromedio || 0) - (a.puntuacionPromedio || 0);
-          default: return 0;
-        }
-      });
-
-    console.log('✅ Productos después de filtros:', sortedAndFiltered.length);
-    setFilteredProducts(sortedAndFiltered);
-    setCurrentPage(1);
-  }, [allProducts, selectedCategory, sortBy, priceRange, getUrlParams]);
-
   // ─── Cambio de categoría ──────────────────────────────────────────────────
   const handleCategoryChange = useCallback((category: string) => {
-    console.log('🎯 Cambiando categoría a:', category);
+    const params = new URLSearchParams(location.search);
+    if (category) {
+      params.set("categoria", category);
+    } else {
+      params.delete("categoria");
+    }
+    navigate(`/productos${params.toString() ? `?${params.toString()}` : ""}`);
+    setCurrentPage(1);
+  }, [location.search, navigate]);
 
-    const currentUrl = new URL(window.location.href);
-    currentUrl.searchParams.delete('categoria');
-    currentUrl.searchParams.delete('busqueda');
-    if (category) currentUrl.searchParams.set('categoria', category);
-
-    window.history.pushState({}, '', currentUrl.toString());
-    setSelectedCategory(category);
+  const handlePriceRangeChange = useCallback((range: [number, number]) => {
+    setPriceRange(range);
     setCurrentPage(1);
   }, []);
 
@@ -635,7 +601,7 @@ const Producto = () => {
   }
 
   // ─── VISTA DE LISTADO DE PRODUCTOS ───────────────────────────────────────
-  const { busqueda } = getUrlParams();
+  const busqueda = searchQuery;
 
   return (
     <div className="min-h-screen bg-white">
@@ -651,7 +617,7 @@ const Producto = () => {
                 selectedCategory={selectedCategory}
                 priceRange={priceRange}
                 onCategoryChange={handleCategoryChange}
-                onPriceRangeChange={setPriceRange}
+                onPriceRangeChange={handlePriceRangeChange}
               />
             </div>
           </div>
@@ -660,7 +626,7 @@ const Producto = () => {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 bg-white border border-gray-200 rounded-lg p-4">
               <div className="flex items-center gap-4">
                 <p className="text-gray-700">
-                  <span className="font-bold">{filteredProducts.length}</span> productos encontrados
+                  <span className="font-bold">{totalProducts}</span> productos encontrados
                 </p>
 
                 <div className="flex items-center gap-2 flex-wrap">
@@ -678,10 +644,9 @@ const Producto = () => {
                       <span>Búsqueda: "{busqueda}"</span>
                       <button
                         onClick={() => {
-                          const currentUrl = new URL(window.location.href);
-                          currentUrl.searchParams.delete('busqueda');
-                          window.history.pushState({}, '', currentUrl.toString());
-                          window.location.reload();
+                          const params = new URLSearchParams(location.search);
+                          params.delete("busqueda");
+                          navigate(`/productos${params.toString() ? `?${params.toString()}` : ""}`);
                         }}
                         className="hover:text-blue-800"
                       >
@@ -724,10 +689,12 @@ const Producto = () => {
                 <button
                   onClick={() => {
                     handleCategoryChange("");
-                    setPriceRange([0, 20000000]);
-                    const currentUrl = new URL(window.location.href);
-                    currentUrl.searchParams.delete('busqueda');
-                    window.history.pushState({}, '', currentUrl.toString());
+                    setPriceRange(DEFAULT_PRICE_RANGE);
+                    const params = new URLSearchParams(location.search);
+                    params.delete("busqueda");
+                    params.delete("categoria");
+                    navigate(`/productos${params.toString() ? `?${params.toString()}` : ""}`);
+                    setCurrentPage(1);
                   }}
                   className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
                 >
@@ -737,7 +704,7 @@ const Producto = () => {
             ) : (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-3 lg:gap-4">
-                  {getCurrentPageProducts().map((item: Product) => (
+                  {filteredProducts.map((item: Product) => (
                     <div key={item.idproducto} className="group">
                       <ProductCard item={item} />
                     </div>

@@ -10,14 +10,19 @@ const configs: Record<"production" | "local", Config> = {
     apiPrefix: "/api",
   },
   local: {
-    baseUrl: "http://localhost:3000",
+    baseUrl: "",
     apiPrefix: "/api",
   },
 };
 
 export type ServerEnv = keyof typeof configs;
 
-export const selectServer: ServerEnv = import.meta.env.DEV ? "local" : "production";
+const forceProductionApi = import.meta.env.VITE_FORCE_PRODUCTION_API === "true";
+
+// In dev, use local API by default. Production can be forced for testing.
+export const selectServer: ServerEnv = import.meta.env.DEV
+  ? (forceProductionApi ? "production" : "local")
+  : "production";
 
 
 export const config: Config = configs[selectServer];

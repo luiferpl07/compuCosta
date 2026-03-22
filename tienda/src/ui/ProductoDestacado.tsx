@@ -31,18 +31,34 @@ const ProductoDestacado = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await fetch(`${config?.baseUrl}${config?.apiPrefix}/products?limit=100`);
-        const data = await response.json();
+        const destacados: Product[] = [];
+        let page = 1;
+        let hasMore = true;
 
-        // ✅ La API devuelve { productos: [...], total, ... }
-        const allProducts: Product[] = data?.productos || [];
+        while (hasMore && destacados.length < 8) {
+          const params = new URLSearchParams();
+          params.set("page", page.toString());
+          params.set("limit", "100");
+          params.set("visibilidad", "visibles");
+          params.set("cantidadMin", "1");
 
-        const destacados = allProducts
-          .filter((p) => p.destacado === true && p.activo === true && (p.cantidad || 0) > 0)
-          .slice(0, 8);
+          const response = await fetch(`${config?.baseUrl}${config?.apiPrefix}/products?${params.toString()}`);
+          if (!response.ok) {
+            throw new Error(`Error HTTP ${response.status}`);
+          }
+
+          const data = await response.json();
+          const pageProducts: Product[] = Array.isArray(data?.productos) ? data.productos : [];
+
+          const featuredInPage = pageProducts.filter((p) => p.destacado === true);
+          destacados.push(...featuredInPage);
+
+          hasMore = Boolean(data?.hasMore);
+          page += 1;
+        }
 
         console.log('✅ Productos destacados:', destacados.length);
-        setProducts(destacados);
+        setProducts(destacados.slice(0, 8));
       } catch (error) {
         console.error('❌ Error fetching featured products:', error);
       } finally {
