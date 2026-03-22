@@ -1,1 +1,49 @@
-.qodo
+.DS_Store
+# Node dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# Build directories
+dist/
+build/
+
+# Environment variables
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Editor directories
+.vscode/
+.idea/
+
+# OS files
+Thumbs.db
+
+# Vercel
+.vercel/
+
+# Caches
+.cache/
+.parcel-cache/
+
+# Coverage
+coverage/
+
+# Serverless
+.serverless/
+
+# Misc
+.turbo/
+/.pnp.*
