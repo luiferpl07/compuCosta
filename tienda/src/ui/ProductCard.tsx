@@ -26,26 +26,42 @@ const ProductCard = ({ item, setSearchText }: Props) => {
   // Calcular porcentaje de descuento solo si Lista 2 está activa
   const precioOriginal = showLista2 ? item.lista2 : item?.lista1 || 0;
   const precioFinal = item?.lista1 || 0;
-  const percentage = showLista2 && precioOriginal > precioFinal 
-    ? ((precioOriginal - precioFinal) / precioOriginal) * 100 
+  const percentage = showLista2 && precioOriginal > precioFinal
+    ? ((precioOriginal - precioFinal) / precioOriginal) * 100
     : 0;
 
   const mainImage = getProductImage(item?.imagenes);
   const fallbackImageAlt = getProductImageAlt(item?.imagenes, item?.nombreproducto);
 
   const handleProduct = () => {
-    console.log('🔗 Navegando a producto:', item.idproducto, item.nombreproducto);
-    window.scrollTo({ top: 0, behavior: 'auto' });
+    const scrollY = Math.max(
+      window.scrollY,
+      window.pageYOffset,
+      document.documentElement.scrollTop,
+      document.body.scrollTop,
+      0
+    );
+    try {
+      const viewState = {
+        scrollY,
+        search: window.location.search || "",
+        timestamp: Date.now()
+      };
+      sessionStorage.setItem('productsViewState', JSON.stringify(viewState));
+    } catch (e) {
+      // ignore
+    }
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
     navigation(`/productos/${item.idproducto}`);
   };
 
   // ✅ SOLUCIÓN: Obtener datos de reseñas de múltiples fuentes posibles
   const reviewCount = item.reseñasCount || item.reviews?.length || 0;
-  const averageRating = item.puntuacionPromedio || 
-    (item.reviews?.length > 0 
-      ? item.reviews.reduce((acc: number, rev: any) => acc + rev.calificacion, 0) / item.reviews.length 
+  const averageRating = item.puntuacionPromedio ||
+    (item.reviews?.length > 0
+      ? item.reviews.reduce((acc: number, rev: any) => acc + rev.calificacion, 0) / item.reviews.length
       : 0);
-  
+
   console.log('⭐ ProductCard - Datos de reseñas:', {
     nombre: item.nombreproducto,
     reseñasCount: item.reseñasCount,
@@ -130,7 +146,7 @@ const ProductCard = ({ item, setSearchText }: Props) => {
           {getCategoriesDisplay(item.categorias)}
         </h3>
         <h2 className="text-lg font-bold line-clamp-2">{item?.nombreproducto || 'Producto sin nombre'}</h2>
-        
+
         {/* ✅ SECCIÓN DE RATING MEJORADA */}
         <div className="flex items-center gap-1">
           <div className="flex items-center text-base text-textoRojo">
@@ -139,7 +155,7 @@ const ProductCard = ({ item, setSearchText }: Props) => {
               const ratingFloat = parseFloat(averageRating.toString());
               const isHalfStar = ratingFloat - index > 0 && ratingFloat - index < 1;
               const isFullStar = ratingFloat >= ratingValue;
-              
+
               return isFullStar ? (
                 <MdStar key={index} className="text-yellow-400 w-4 h-4" />
               ) : isHalfStar ? (

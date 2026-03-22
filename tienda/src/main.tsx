@@ -23,7 +23,7 @@ import AddAddress from "./ui/AddAddress.tsx";
 import AcercaDeNosotros from "./pages/Info.tsx";
 import { disableConsoleInProduction } from '../utils/disableConsole.ts';
 
-disableConsoleInProduction(); 
+disableConsoleInProduction();
 
 const RouterLayout = () => {
   return (
@@ -52,11 +52,11 @@ const router = createBrowserRouter([
       },
       {
         path: "/perfil/editar",
-        element: <EditProfile />, 
+        element: <EditProfile />,
       },
       {
         path: "/perfil/direccion",
-        element: <AddAddress />, 
+        element: <AddAddress />,
       },
       {
         path: "/productos",
@@ -70,7 +70,7 @@ const router = createBrowserRouter([
         path: "/favorito",
         element: <Favorito />,
       },
-     
+
       {
         path: "/categorias",
         element: <Categoria />,
@@ -111,14 +111,14 @@ const router = createBrowserRouter([
         path: "/acerca-de-nosotros",
         element: <AcercaDeNosotros />,
       },
-       
-      
+
+
     ],
   },
 ]);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  
+
   <ShopifyProvider>
     <AuthProvider>
       <RouterProvider router={router} />

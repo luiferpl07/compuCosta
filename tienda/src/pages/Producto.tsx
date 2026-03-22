@@ -13,6 +13,7 @@ import AddToCartBtn from "../ui/AddToCartBtn";
 import { productPayment } from "../assets";
 import ProductCard from "../ui/ProductCard";
 import Filters from "../ui/Filtros";
+import SkeletonProductCard from "../ui/SkeletonProductCard";
 import ReviewsSection from "../ui/Review";
 import ProductDescription from "../ui/DescripcionProducto";
 import CaracteristicaProducto from "../ui/CaracteristicaProducto";
@@ -58,15 +59,76 @@ const Producto = () => {
   const [imgUrl, setImgUrl] = useState("");
   const [selectedColor, setSelectedColor] = useState<Product["colores"][0] | null>(null);
   const [priceRange, setPriceRange] = useState<[number, number]>(DEFAULT_PRICE_RANGE);
+  const [offerOnly, setOfferOnly] = useState(false);
+  const [stockOnly, setStockOnly] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [categorySelected, setCategorySelected] = useState<CategoryProps | null>(null);
   const [categories, setCategories] = useState<CategoryWithSubcategories[]>([]);
-  
+
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const navigate = useNavigate();
 
   const requestAbortRef = useRef<AbortController | null>(null);
+
+  // Flag que indica si estamos restaurando estado desde sessionStorage (para saltarnos el Loading)
+  const [isRestoringState, setIsRestoringState] = useState(() => {
+    return !id && !!sessionStorage.getItem('productsViewState');
+  });
+
+  // Deshabilitar restauración automática del navegador
+  useEffect(() => {
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+      return () => { window.history.scrollRestoration = 'auto'; };
+    }
+  }, []);
+
+  // Restaurar filtros desde sessionStorage al volver de detalle
+  useEffect(() => {
+    if (id || !isRestoringState) return;
+    try {
+      const saved = sessionStorage.getItem('productsViewState');
+      if (!saved) { setIsRestoringState(false); return; }
+      const obj = JSON.parse(saved);
+      const params = new URLSearchParams(obj.search || '');
+
+      const savedBusqueda = params.get('busqueda') || '';
+      const savedCategoria = params.get('categoria') || '';
+      const savedPrecioMin = params.get('precioMin') ? Number(params.get('precioMin')) : DEFAULT_PRICE_RANGE[0];
+      const savedPrecioMax = params.get('precioMax') ? Number(params.get('precioMax')) : DEFAULT_PRICE_RANGE[1];
+      const savedPage = params.get('page') ? Number(params.get('page')) : 1;
+
+      if (savedBusqueda) setSearchQuery(savedBusqueda);
+      if (savedCategoria) setSelectedCategory(savedCategoria);
+      setPriceRange([savedPrecioMin, savedPrecioMax]);
+      setCurrentPage(savedPage);
+    } catch (e) {
+      setIsRestoringState(false);
+    }
+  }, [id, isRestoringState]);
+
+  // Restaurar scroll cuando los productos estén listos
+  useEffect(() => {
+    if (id || !isRestoringState || loading || filteredProducts.length === 0) return;
+    try {
+      const saved = sessionStorage.getItem('productsViewState');
+      if (!saved) { setIsRestoringState(false); return; }
+      const obj = JSON.parse(saved);
+      if (obj.scrollY) {
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: obj.scrollY, behavior: 'instant' as ScrollBehavior });
+          sessionStorage.removeItem('productsViewState');
+          setIsRestoringState(false);
+        });
+      } else {
+        sessionStorage.removeItem('productsViewState');
+        setIsRestoringState(false);
+      }
+    } catch (e) {
+      setIsRestoringState(false);
+    }
+  }, [id, isRestoringState, loading, filteredProducts.length]);
 
   const totalPages = Math.max(1, Math.ceil(totalProducts / ITEMS_PER_PAGE));
 
@@ -76,7 +138,9 @@ const Producto = () => {
       categoria: urlParams.get('categoria') || '',
       busqueda: urlParams.get('busqueda') || '',
       precioMin: urlParams.get('precioMin') ? Number(urlParams.get('precioMin')) : 0,
-      precioMax: urlParams.get('precioMax') ? Number(urlParams.get('precioMax')) : MAX_PRICE
+      precioMax: urlParams.get('precioMax') ? Number(urlParams.get('precioMax')) : MAX_PRICE,
+      oferta: urlParams.get('oferta') === '1' || urlParams.get('oferta') === 'true',
+      stock: urlParams.get('stock') === '1' || urlParams.get('stock') === 'true'
     };
   }, [location.search]);
 
@@ -149,6 +213,14 @@ const Producto = () => {
 
       if (priceRange[1] < DEFAULT_PRICE_RANGE[1]) {
         params.set("precioMax", priceRange[1].toString());
+      }
+
+      if (offerOnly) {
+        params.set("oferta", "1");
+      }
+
+      if (stockOnly) {
+        params.set("stock", "1");
       }
 
       const response = await fetch(
@@ -263,12 +335,14 @@ const Producto = () => {
 
   // ─── Detecta cambios en URL ───────────────────────────────────────────────
   useEffect(() => {
-    if (id) return;
+    if (id || isRestoringState) return;
 
-    const { categoria, busqueda, precioMin, precioMax } = getUrlParams();
+    const { categoria, busqueda, precioMin, precioMax, oferta, stock } = getUrlParams();
     setSelectedCategory(categoria);
     setSearchQuery(busqueda);
     setPriceRange([precioMin, precioMax]);
+    setOfferOnly(!!oferta);
+    setStockOnly(!!stock);
     setCurrentPage(1);
   }, [location.search, getUrlParams, id]);
 
@@ -326,7 +400,6 @@ const Producto = () => {
     navigate(`/productos${params.toString() ? `?${params.toString()}` : ""}`);
     setCurrentPage(1);
   }, [location.search, navigate]);
-
   const handlePriceRangeChange = useCallback((range: [number, number]) => {
     const params = new URLSearchParams(location.search);
     if (range[0] > 0) {
@@ -345,10 +418,26 @@ const Producto = () => {
     setCurrentPage(1);
   }, [location.search, navigate]);
 
+  const handleToggleOffer = useCallback((value: boolean) => {
+    const params = new URLSearchParams(location.search);
+    if (value) params.set("oferta", "1"); else params.delete("oferta");
+    navigate(`/productos${params.toString() ? `?${params.toString()}` : ""}`);
+    setOfferOnly(value);
+    setCurrentPage(1);
+  }, [location.search, navigate]);
+
+  const handleToggleStock = useCallback((value: boolean) => {
+    const params = new URLSearchParams(location.search);
+    if (value) params.set("stock", "1"); else params.delete("stock");
+    navigate(`/productos${params.toString() ? `?${params.toString()}` : ""}`);
+    setStockOnly(value);
+    setCurrentPage(1);
+  }, [location.search, navigate]);
+
   // ─── Imagen y color inicial del producto individual ───────────────────────
   useEffect(() => {
     if (productData?.imagenes) setImgUrl(getProductImage(productData.imagenes));
-    if (productData?.colores)  setSelectedColor(productData.colores[0] || null);
+    if (productData?.colores) setSelectedColor(productData.colores[0] || null);
   }, [productData]);
 
   const handleAddReview = (newReview: Review) => {
@@ -432,11 +521,11 @@ const Producto = () => {
     return "Sin categoría";
   };
 
-  const isLista2Active  = productData?.lista2_activa === true;
-  const hasLista2Price  = productData?.lista2 && productData.lista2 > 0;
-  const showLista2      = isLista2Active && hasLista2Price;
+  const isLista2Active = productData?.lista2_activa === true;
+  const hasLista2Price = productData?.lista2 && productData.lista2 > 0;
+  const showLista2 = isLista2Active && hasLista2Price;
 
-  if (loading) return <Loading />;
+  if (loading && !isRestoringState) return <Loading />;
 
   // ─── VISTA INDIVIDUAL DEL PRODUCTO ───────────────────────────────────────
   if (id && productData) {
@@ -451,11 +540,10 @@ const Producto = () => {
                     src={getProductImage([item])}
                     alt={item.alt_text || "Imagen del producto"}
                     key={item.id ?? index}
-                    className={`w-24 h-24 object-cover cursor-pointer rounded-lg ${
-                      imgUrl === getProductImage([item])
+                    className={`w-24 h-24 object-cover cursor-pointer rounded-lg ${imgUrl === getProductImage([item])
                         ? "border-2 border-amber-500"
                         : "border border-gray-200 hover:border-amber-300"
-                    }`}
+                      }`}
                     onClick={() => setImgUrl(getProductImage([item]))}
                   />
                 ))}
@@ -546,11 +634,10 @@ const Producto = () => {
                   {productData.colores.map((item) => (
                     <div
                       key={item.codigoHex}
-                      className={`${
-                        item.codigoHex === selectedColor?.codigoHex
+                      className={`${item.codigoHex === selectedColor?.codigoHex
                           ? "border border-black p-1 rounded-full"
                           : "border-transparent"
-                      }`}
+                        }`}
                     >
                       <div
                         className="w-10 h-10 rounded-full cursor-pointer"
@@ -689,7 +776,16 @@ const Producto = () => {
               </div>
             </div>
 
-            {filteredProducts.length === 0 ? (
+            {loading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-3 lg:gap-4">
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <div key={i} className="group">
+                    {/* @ts-ignore */}
+                    <SkeletonProductCard />
+                  </div>
+                ))}
+              </div>
+            ) : filteredProducts.length === 0 ? (
               <div className="bg-white border border-gray-200 rounded-lg p-12 text-center">
                 <div className="text-gray-400 text-6xl mb-4">🔍</div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
@@ -699,8 +795,8 @@ const Producto = () => {
                   {busqueda
                     ? `No hay productos que coincidan con "${busqueda}"`
                     : selectedCategory && categorySelected
-                    ? `No hay productos disponibles en la categoría "${categorySelected.nombre}"`
-                    : "Intenta ajustar los filtros o busca productos diferentes"}
+                      ? `No hay productos disponibles en la categoría "${categorySelected.nombre}"`
+                      : "Intenta ajustar los filtros o busca productos diferentes"}
                 </p>
                 <button
                   onClick={() => {
@@ -734,6 +830,7 @@ const Producto = () => {
                         onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                         disabled={currentPage === 1}
                         className="p-2 rounded-md text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        aria-label="Página anterior"
                       >
                         <IoChevronBack className="w-5 h-5" />
                       </button>
@@ -742,13 +839,13 @@ const Producto = () => {
                         <button
                           key={index}
                           onClick={() => typeof pageNum === "number" && setCurrentPage(pageNum)}
-                          className={`px-4 py-2 text-sm rounded-md transition-colors ${
-                            pageNum === currentPage
+                          aria-label={typeof pageNum === 'number' ? `Ir a la página ${pageNum}` : undefined}
+                          className={`px-4 py-2 text-sm rounded-md transition-colors ${pageNum === currentPage
                               ? "bg-orange-500 text-white"
                               : pageNum === "..."
-                              ? "cursor-default text-gray-400"
-                              : "text-gray-600 hover:bg-gray-100 border border-gray-300"
-                          }`}
+                                ? "cursor-default text-gray-400"
+                                : "text-gray-600 hover:bg-gray-100 border border-gray-300"
+                            }`}
                         >
                           {pageNum}
                         </button>
@@ -758,6 +855,7 @@ const Producto = () => {
                         onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
                         disabled={currentPage === totalPages}
                         className="p-2 rounded-md text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        aria-label="Página siguiente"
                       >
                         <IoChevronForward className="w-5 h-5" />
                       </button>

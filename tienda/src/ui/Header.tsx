@@ -284,7 +284,7 @@ const Header = () => {
   const hasActiveCategories = categories.length > 0;
 
   return (
-    <div className="w-full bg-gradient-to-r from-white to-gray-50 sticky top-0 z-50 shadow-sm border-b border-gray-100">
+    <div role="navigation" aria-label="Main navigation" className="w-full bg-gradient-to-r from-white to-gray-50 sticky top-0 z-50 shadow-sm border-b border-gray-100">
       {/* ── Barra superior ───────────────────────────────────────────────── */}
       <div className="max-w-screen-xl mx-auto min-h-[4.5rem] sm:min-h-[5.5rem] flex items-center justify-between px-4 sm:px-6 lg:px-8 py-2">
         {/* Botón menú móvil */}
@@ -308,7 +308,7 @@ const Header = () => {
         </Link>
 
         {/* Barra de búsqueda (desktop) */}
-        <div className="hidden lg:flex max-w-md xl:max-w-2xl w-full mx-6 relative search-container">
+        <div role="search" aria-label="Buscar productos" className="hidden lg:flex max-w-md xl:max-w-2xl w-full mx-6 relative search-container">
           <div
             className={`flex items-center w-full relative rounded-2xl bg-white
               border-2 transition-all duration-300 px-4 xl:px-5 py-3 shadow-sm hover:shadow-md
@@ -322,6 +322,7 @@ const Header = () => {
                 ${searchFocused || searchText ? "text-textoRojo scale-110" : "text-gray-400"}`}
             />
             <input
+              aria-label="Buscar productos"
               type="text"
               onChange={e => setSearchText(e.target.value)}
               value={searchText}
@@ -398,24 +399,22 @@ const Header = () => {
 
       {/* ── Barra de búsqueda móvil ───────────────────────────────────────── */}
       {mobileSearchOpen && (
-        <div className="lg:hidden w-full px-4 sm:px-6 pb-4 search-container">
-          <div className="flex items-center relative rounded-2xl bg-white
-            border-2 border-textoRojo shadow-lg px-4 py-3 ring-4 ring-red-50">
+        <div role="search" aria-label="Buscar productos" className="lg:hidden w-full px-4 sm:px-6 pb-4 search-container">
+          <div className="flex items-center relative rounded-2xl bg-white border-2 border-textoRojo shadow-lg px-4 py-3 ring-4 ring-red-50">
             <BiSearchAlt2 className="text-xl sm:text-2xl mr-3 text-textoRojo" />
             <input
+              aria-label="Buscar productos"
               type="text"
               onChange={e => setSearchText(e.target.value)}
               value={searchText}
               placeholder={isIndexReady ? "¿Qué estás buscando hoy?" : "Cargando productos..."}
-              className="w-full bg-transparent text-gray-800 text-sm sm:text-base outline-none
-                placeholder:text-gray-400 placeholder:font-normal font-medium"
+              className="w-full bg-transparent text-gray-800 text-sm sm:text-base outline-none placeholder:text-gray-400 placeholder:font-normal font-medium"
               autoFocus
             />
             {searchText && (
               <button
                 onClick={clearSearch}
-                className="flex items-center justify-center p-1.5 rounded-full
-                  hover:bg-red-50 transition-colors duration-200"
+                className="flex items-center justify-center p-1.5 rounded-full hover:bg-red-50 transition-colors duration-200"
                 aria-label="Limpiar búsqueda"
               >
                 <IoClose className="text-xl sm:text-2xl text-gray-500 hover:text-textoRojo" />

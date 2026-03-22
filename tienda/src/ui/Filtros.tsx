@@ -90,17 +90,6 @@ const Filters = ({
     onPriceRangeChange(tempPriceRange);
   };
 
-  const toggleCategoryExpansion = (categoryId: number) => {
-    setExpandedCategories(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(categoryId)) {
-        newSet.delete(categoryId);
-      } else {
-        newSet.add(categoryId);
-      }
-      return newSet;
-    });
-  };
 
   const hasSelectedSubcategory = (parentId: number) => {
     if (!subcategoriesMap[parentId]) return false;
@@ -110,7 +99,36 @@ const Filters = ({
   const hasActiveCategories = categories.length > 0;
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md w-full h-auto relative">
+    <div role="region" aria-label="Filtros de productos" className="bg-white p-6 rounded-lg shadow-md w-full h-auto relative">
+      {/* Badges de filtros activos y botón 'Limpiar todo' */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          {selectedCategory && selectedCategory !== "" && (
+            <span className="px-3 py-1 rounded-full bg-red-50 text-textoRojo text-sm font-medium">
+              {categorySelected ? categorySelected.nombre : selectedCategory}
+            </span>
+          )}
+          {(priceRange[0] !== 0 || priceRange[1] !== MAX_PRICE) && (
+            <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 text-sm">
+              ${priceRange[0].toLocaleString('es-CO')} - ${priceRange[1].toLocaleString('es-CO')}
+            </span>
+          )}
+        </div>
+        <div>
+          <button
+            onClick={() => {
+              console.log('🧹 Botón Limpiar todo clickeado');
+              onCategoryChange("");
+              onPriceRangeChange([0, MAX_PRICE]);
+              setTempPriceRange([0, MAX_PRICE]);
+            }}
+            className="text-sm text-gray-500 hover:text-textoRojo underline"
+            aria-label="Limpiar todos los filtros"
+          >
+            Limpiar todo
+          </button>
+        </div>
+      </div>
       {loading && (
         <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
           <RotatingLines
@@ -129,6 +147,7 @@ const Filters = ({
           <div className="max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 flex flex-col w-full">
             <button
               onClick={() => onCategoryChange("")}
+              aria-pressed={selectedCategory === ""}
               className={`text-left w-full px-3 py-2 rounded text-sm transition-colors mb-1 ${
                 selectedCategory === "" 
                   ? "bg-textoRojo text-white font-medium" 
@@ -149,6 +168,7 @@ const Filters = ({
                   <div className="flex items-center">
                     <button
                       onClick={() => onCategoryChange(category.slug)}
+                      aria-pressed={isParentSelected}
                       className={`flex-1 text-left px-3 py-2 rounded text-sm transition-colors ${
                         isParentSelected
                           ? "bg-textoRojo text-white font-medium"
@@ -186,6 +206,7 @@ const Filters = ({
                         <button
                           key={subcategory.id}
                           onClick={() => onCategoryChange(subcategory.slug)}
+                          aria-pressed={selectedCategory === subcategory.slug}
                           className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
                             selectedCategory === subcategory.slug
                               ? "bg-textoRojo text-white font-medium"
