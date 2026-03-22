@@ -741,7 +741,7 @@ const Producto = () => {
     <div className="min-h-screen bg-white">
       <div className="w-full px-2 sm:px-4 lg:px-6 xl:px-8 py-4">
         <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
-          <div className="w-full lg:w-64 xl:w-72 flex-shrink-0">
+          <div className="w-full lg:w-72 xl:w-80 flex-shrink-0">
             <div className="bg-white border border-gray-200 rounded-lg p-3 lg:p-4 sticky top-4">
               <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-200">
                 <HiAdjustments className="w-5 h-5 text-gray-700" />
