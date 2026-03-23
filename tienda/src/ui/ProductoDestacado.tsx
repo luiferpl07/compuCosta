@@ -31,30 +31,50 @@ const ProductoDestacado = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const destacados: Product[] = [];
-        let page = 1;
-        let hasMore = true;
+        // Intentamos aprovechar el filtrado/paginación del servidor para pedir solo productos destacados
+        const params = new URLSearchParams();
+        params.set("page", "1");
+        params.set("limit", "8");
+        params.set("visibilidad", "visibles");
+        params.set("cantidadMin", "1");
+        // Preferimos pedir solo destacados si el servidor soporta este filtro
+        params.set("destacado", "true");
 
-        while (hasMore && destacados.length < 8) {
-          const params = new URLSearchParams();
-          params.set("page", page.toString());
-          params.set("limit", "100");
-          params.set("visibilidad", "visibles");
-          params.set("cantidadMin", "1");
+        const response = await fetch(`${config?.baseUrl}${config?.apiPrefix}/products?${params.toString()}`);
+        if (!response.ok) {
+          throw new Error(`Error HTTP ${response.status}`);
+        }
 
-          const response = await fetch(`${config?.baseUrl}${config?.apiPrefix}/products?${params.toString()}`);
-          if (!response.ok) {
-            throw new Error(`Error HTTP ${response.status}`);
+        const data = await response.json();
+        let destacados: Product[] = Array.isArray(data?.productos) ? data.productos : [];
+
+        // Fallback: si el servidor no soporta el filtro `destacado` o devuelve pocos resultados,
+        // caemos a la lógica anterior (paginación por cliente) para buscar suficientes destacados.
+        if (!destacados.length || destacados.length < 8) {
+          const collected: Product[] = destacados.slice();
+          let page = 1;
+          let hasMore = true;
+
+          while (hasMore && collected.length < 8 && page <= 10) {
+            const fbParams = new URLSearchParams();
+            fbParams.set("page", page.toString());
+            fbParams.set("limit", "50");
+            fbParams.set("visibilidad", "visibles");
+            fbParams.set("cantidadMin", "1");
+
+            const resp = await fetch(`${config?.baseUrl}${config?.apiPrefix}/products?${fbParams.toString()}`);
+            if (!resp.ok) break;
+
+            const pageData = await resp.json();
+            const pageProducts: Product[] = Array.isArray(pageData?.productos) ? pageData.productos : [];
+            const featuredInPage = pageProducts.filter((p) => p.destacado === true);
+            collected.push(...featuredInPage);
+
+            hasMore = Boolean(pageData?.hasMore);
+            page += 1;
           }
 
-          const data = await response.json();
-          const pageProducts: Product[] = Array.isArray(data?.productos) ? data.productos : [];
-
-          const featuredInPage = pageProducts.filter((p) => p.destacado === true);
-          destacados.push(...featuredInPage);
-
-          hasMore = Boolean(data?.hasMore);
-          page += 1;
+          destacados = collected;
         }
 
         console.log('✅ Productos destacados:', destacados.length);

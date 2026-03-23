@@ -360,10 +360,22 @@ const Header = () => {
           {sessionUser && (
             <Link
               to={"/perfil"}
-              className="hidden xl:inline-flex items-center rounded-full border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-semibold text-textoRojo hover:bg-red-100 transition-colors duration-200 whitespace-nowrap overflow-hidden max-w-[150px]"
+              className="hidden sm:inline-flex items-center rounded-full border border-red-100 bg-red-50 px-2 py-1 text-[10px] sm:text-xs font-semibold text-textoRojo hover:bg-red-100 transition-colors duration-200 whitespace-nowrap overflow-hidden max-w-[100px] sm:max-w-[150px]"
               title={userDisplayName || "Mi perfil"}
             >
               <span className="truncate">Hola, {sessionUser.firstName || "Usuario"}</span>
+            </Link>
+          )}
+
+          {/* Avatar compacto para móviles (xs) */}
+          {sessionUser && (
+            <Link
+              to={"/perfil"}
+              title={userDisplayName || "Mi perfil"}
+              aria-label={userDisplayName || "Mi perfil"}
+              className="inline-flex sm:hidden items-center justify-center w-8 h-8 rounded-full bg-red-50 text-textoRojo font-semibold text-sm hover:bg-red-100 transition-colors duration-200 flex-shrink-0"
+            >
+              <span>{(sessionUser?.firstName || 'U').charAt(0).toUpperCase()}</span>
             </Link>
           )}
 
