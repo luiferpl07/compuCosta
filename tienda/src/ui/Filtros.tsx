@@ -161,7 +161,7 @@ const Filters = ({
 
         <div className="mb-3 flex flex-wrap gap-1.5">
           {selectedCategory && (
-            <span className="rounded-full bg-red-50 px-2.5 py-0.5 text-[10px] font-bold text-textoRojo truncate max-w-full">
+            <span title={categorySelected ? categorySelected.nombre : selectedCategory} className="rounded-full bg-red-50 px-2.5 py-0.5 text-[10px] font-bold text-textoRojo truncate max-w-full">
               {categorySelected ? categorySelected.nombre : selectedCategory}
             </span>
           )}
@@ -269,6 +269,7 @@ const Filters = ({
                             onClick={() => handleSelectCategory(category.slug)}
                             aria-pressed={isParentSelected}
                             className={`flex-1 rounded-xl px-3 py-2 text-left text-sm transition-colors truncate ${isParentSelected ? "bg-textoRojo font-medium text-white" : hasSelectedChild ? "bg-red-50 font-medium text-textoRojo" : "hover:bg-gray-100"}`}
+                            title={category.nombre}
                           >
                             {category.nombre}
                           </button>
@@ -300,6 +301,7 @@ const Filters = ({
                                   onClick={() => handleSelectCategory(subcategory.slug)}
                                   aria-pressed={selectedCategory === subcategory.slug}
                                   className={`w-full rounded-xl px-3 py-2 text-left text-sm transition-colors truncate ${selectedCategory === subcategory.slug ? "bg-textoRojo font-medium text-white" : "text-gray-600 hover:bg-gray-100"}`}
+                                  title={subcategory.nombre}
                                 >
                                   <span className="mr-2 text-gray-400">└</span>
                                   {subcategory.nombre}
