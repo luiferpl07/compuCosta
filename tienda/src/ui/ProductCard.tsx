@@ -1,11 +1,10 @@
 import { MdOutlineStarOutline, MdStar, MdStarHalf } from "react-icons/md";
-import { IoLink } from "react-icons/io5";
 import { Product } from "../../type";
 import AddToCartBtn from "./AddToCartBtn";
 import { useState } from "react";
-import ProductCardSideNav from "./ProductCardSideNav";
 import { useNavigate } from "react-router-dom";
 import { getProductImage, getProductImageAlt } from "../../utils/imageUtils";
+import ProductCardSideNav from "./ProductCardSideNav";
 
 interface Props {
   item: Product;
@@ -18,12 +17,10 @@ const ProductCard = ({ item, setSearchText }: Props) => {
 
   const open = () => setIsOpen(true);
 
-  // ✅ Verificar si Lista 2 está activa y calcular descuento apropiado
   const isLista2Active = item?.lista2_activa === true;
   const hasLista2Price = item?.lista2 && item.lista2 > 0;
   const showLista2 = isLista2Active && hasLista2Price;
 
-  // Calcular porcentaje de descuento solo si Lista 2 está activa
   const precioOriginal = showLista2 ? item.lista2 : item?.lista1 || 0;
   const precioFinal = item?.lista1 || 0;
   const percentage = showLista2 && precioOriginal > precioFinal
@@ -58,14 +55,12 @@ const ProductCard = ({ item, setSearchText }: Props) => {
     navigation(`/productos/${item.idproducto}`);
   };
 
-  // ✅ SOLUCIÓN: Obtener datos de reseñas de múltiples fuentes posibles
   const reviewCount = item.reseñasCount || item.reviews?.length || 0;
   const averageRating = item.puntuacionPromedio ||
     (item.reviews?.length > 0
       ? item.reviews.reduce((acc: number, rev: any) => acc + rev.calificacion, 0) / item.reviews.length
       : 0);
 
-  // Función para obtener SOLO la categoría más específica (subcategoría)
   const getCategoriesDisplay = (categorias: any) => {
     if (typeof categorias === "string") {
       if (categorias.includes(",")) {
@@ -80,11 +75,8 @@ const ProductCard = ({ item, setSearchText }: Props) => {
     }
 
     const categoriasNormalizadas = categorias.map(item => {
-      if (item.categoria) {
-        return item.categoria;
-      } else if (item.nombre) {
-        return item;
-      }
+      if (item.categoria) return item.categoria;
+      else if (item.nombre) return item;
       return item;
     });
 
@@ -99,20 +91,15 @@ const ProductCard = ({ item, setSearchText }: Props) => {
       }
     }
 
-    if (subcategorias.length > 0) {
-      return subcategorias.map(cat => cat.nombre).join(", ");
-    }
-
-    if (categoriasPadre.length > 0) {
-      return categoriasPadre.map(cat => cat.nombre).join(", ");
-    }
+    if (subcategorias.length > 0) return subcategorias.map(cat => cat.nombre).join(", ");
+    if (categoriasPadre.length > 0) return categoriasPadre.map(cat => cat.nombre).join(", ");
 
     return "Sin categoría";
   };
 
   return (
-    <div data-product-id={item.idproducto} className="border border-gray-200 rounded-lg p-1 overflow-hidden hover:border-amber-300 duration-200 cursor-pointer relative">
-      <div className="w-full h-60 relative p-2 group">
+    <div data-product-id={item.idproducto} className="group border border-gray-200 rounded-lg p-1 overflow-hidden hover:border-amber-300 duration-200 cursor-pointer relative">
+      <div className="w-full h-60 relative p-2">
         {/* Badge de descuento */}
         {showLista2 && percentage > 0 && item.lista2 > item.lista1 && (
           <span
@@ -132,29 +119,25 @@ const ProductCard = ({ item, setSearchText }: Props) => {
             loading="lazy"
           />
         </div>
+
+        
         <ProductCardSideNav product={item} />
       </div>
 
-      <div
-        className="flex flex-col gap-2 px-2 pb-2"
-        onClick={handleProduct}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            handleProduct();
-          }
-        }}
-        role="button"
-        tabIndex={0}
-      >
-        <h3 className="text-xs uppercase font-semibold text-textoNegro/70 cursor-pointer">
+      <div className="flex flex-col gap-2 px-2 pb-2">
+        <h3 className="text-xs uppercase font-semibold text-textoNegro/70">
           {getCategoriesDisplay(item.categorias)}
         </h3>
-        <h2 className="text-lg font-bold line-clamp-2 cursor-pointer">{item?.nombreproducto || 'Producto sin nombre'}</h2>
 
-        {/* ✅ SECCIÓN DE RATING MEJORADA */}
-        <div className="flex items-center gap-1 cursor-pointer">
-          <div className="flex items-center text-base text-textoRojo">
+        <h2
+          onClick={handleProduct}
+          className="text-lg font-bold line-clamp-2 cursor-pointer hover:text-amber-600 duration-200"
+        >
+          {item?.nombreproducto || 'Producto sin nombre'}
+        </h2>
+
+        <div className="flex items-center gap-1">
+          <div className="flex items-center text-base">
             {[...Array(5)].map((_, index) => {
               const ratingValue = index + 1;
               const ratingFloat = parseFloat(averageRating.toString());
@@ -180,13 +163,11 @@ const ProductCard = ({ item, setSearchText }: Props) => {
               </span>
             </>
           ) : (
-            <span className="text-xs text-gray-500 ml-1">
-              Sin reseñas
-            </span>
+            <span className="text-xs text-gray-500 ml-1">Sin reseñas</span>
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           <AddToCartBtn product={item} className="flex-grow" />
         </div>
       </div>

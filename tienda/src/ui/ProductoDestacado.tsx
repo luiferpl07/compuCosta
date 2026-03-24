@@ -21,23 +21,22 @@ const ProductoDestacado = () => {
     slidesToShow: 4,
     slidesToScroll: 1,
     autoplay: false,
+    arrows: false,
     responsive: [
-      { breakpoint: 1024, settings: { slidesToShow: 3, slidesToScroll: 1 } },
-      { breakpoint: 768,  settings: { slidesToShow: 2, slidesToScroll: 1 } },
-      { breakpoint: 480,  settings: { slidesToShow: 1, slidesToScroll: 1 } }
+      { breakpoint: 1024, settings: { slidesToShow: 3, slidesToScroll: 1, arrows: false } },
+      { breakpoint: 640,  settings: { slidesToShow: 2, slidesToScroll: 1, arrows: false } },
+      { breakpoint: 480,  settings: { slidesToShow: 1, slidesToScroll: 1, arrows: false, dots: false, centerMode: true, centerPadding: "40px" } }
     ]
   };
 
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        // Intentamos aprovechar el filtrado/paginación del servidor para pedir solo productos destacados
         const params = new URLSearchParams();
         params.set("page", "1");
         params.set("limit", "8");
         params.set("visibilidad", "visibles");
         params.set("cantidadMin", "1");
-        // Preferimos pedir solo destacados si el servidor soporta este filtro
         params.set("destacado", "true");
 
         const response = await fetch(`${config?.baseUrl}${config?.apiPrefix}/products?${params.toString()}`);
@@ -48,8 +47,6 @@ const ProductoDestacado = () => {
         const data = await response.json();
         let destacados: Product[] = Array.isArray(data?.productos) ? data.productos : [];
 
-        // Fallback: si el servidor no soporta el filtro `destacado` o devuelve pocos resultados,
-        // caemos a la lógica anterior (paginación por cliente) para buscar suficientes destacados.
         if (!destacados.length || destacados.length < 8) {
           const collected: Product[] = destacados.slice();
           let page = 1;
@@ -77,7 +74,7 @@ const ProductoDestacado = () => {
           destacados = collected;
         }
 
-        console.log('✅ Productos destacados:', destacados.length);
+        console.log('Productos destacados:', destacados.length);
         setProducts(destacados.slice(0, 8));
       } catch (error) {
         console.error('❌ Error fetching featured products:', error);
@@ -132,24 +129,26 @@ const ProductoDestacado = () => {
       </div>
 
       <div className="relative mb-12">
+        {/*  Flechas solo en desktop */}
         {products.length > 4 && (
           <>
             <button
               onClick={() => sliderRef.current?.slickPrev()}
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white rounded-full shadow-lg p-2 -ml-4 opacity-80 hover:opacity-100 transition-opacity"
+              className="hidden md:block absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white rounded-full shadow-lg p-2 -ml-4 opacity-80 hover:opacity-100 transition-opacity"
             >
               <FaChevronLeft className="text-gray-600" />
             </button>
             <button
               onClick={() => sliderRef.current?.slickNext()}
-              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white rounded-full shadow-lg p-2 -mr-4 opacity-80 hover:opacity-100 transition-opacity"
+              className="hidden md:block absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white rounded-full shadow-lg p-2 -mr-4 opacity-80 hover:opacity-100 transition-opacity"
             >
               <FaChevronRight className="text-gray-600" />
             </button>
           </>
         )}
 
-        <div className="px-6">
+        {/* overflow-hidden para que centerMode no desborde */}
+        <div className="overflow-hidden">
           <Slider ref={sliderRef} {...settings}>
             {products.map((item) => (
               <div key={item.idproducto} className="px-2">
