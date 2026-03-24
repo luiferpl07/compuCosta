@@ -1,124 +1,67 @@
-import React from "react";
+import { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
 import "./index.css";
-import App from "./App.tsx";
 import { AuthProvider } from "./context/AuthContext";
-import { ShopifyProvider } from "./context/ShopifyContext.tsx"; // ✅ NUEVO IMPORT
+import { ShopifyProvider } from "./context/ShopifyContext.tsx";
 import Layout from "./ui/Layout.tsx";
 import { createBrowserRouter, Outlet, RouterProvider } from "react-router-dom";
-import Producto from "./pages/Producto.tsx";
-import Categoria from "./pages/Categoria.tsx";
-import Perfil from "./pages/Perfil.tsx";
-import Carrito from "./pages/Carrito.tsx";
-import Cancelar from "./pages/Cancelar.tsx";
-import NotFound from "./pages/NotFound.tsx";
-import Tiendas from "./pages/Tiendas.tsx";
-import Envios from "./pages/Envios.tsx";
-import Servicio from "./pages/Servicio.tsx";
-import Favorito from "./pages/Favorito.tsx";
-import Contacto from "./pages/Contacto.tsx";
-import Success from "./pages/Success.tsx";
-import EditProfile from "./ui/EditProfile.tsx";
-import AddAddress from "./ui/AddAddress.tsx";
-import AcercaDeNosotros from "./pages/Info.tsx";
-import { disableConsoleInProduction } from '../utils/disableConsole.ts';
-
+import { disableConsoleInProduction } from "../utils/disableConsole.ts";
+import LoadingSpinner from "./ui/Loading.tsx";
 disableConsoleInProduction();
+const App = lazy(() => import("./App.tsx"));
+const Producto = lazy(() => import("./pages/Producto.tsx"));
+const Categoria = lazy(() => import("./pages/Categoria.tsx"));
+const Perfil = lazy(() => import("./pages/Perfil.tsx"));
+const Carrito = lazy(() => import("./pages/Carrito.tsx"));
+const Cancelar = lazy(() => import("./pages/Cancelar.tsx"));
+const NotFound = lazy(() => import("./pages/NotFound.tsx"));
+const Servicio = lazy(() => import("./pages/Servicio.tsx"));
+const Favorito = lazy(() => import("./pages/Favorito.tsx"));
+const Contacto = lazy(() => import("./pages/Contacto.tsx"));
+const Success = lazy(() => import("./pages/Success.tsx"));
+const EditProfile = lazy(() => import("./ui/EditProfile.tsx"));
+const AddAddress = lazy(() => import("./ui/AddAddress.tsx"));
+const AcercaDeNosotros = lazy(() => import("./pages/Info.tsx"));
+
 
 const RouterLayout = () => {
   return (
     <Layout>
-      <Outlet />
+      <Suspense fallback={<LoadingSpinner />}>
+        <Outlet />
+      </Suspense>
     </Layout>
   );
 };
+
 
 const router = createBrowserRouter([
   {
     path: "/",
     element: <RouterLayout />,
     children: [
-      {
-        path: "/",
-        element: <App />,
-      },
-      {
-        path: "/carrito",
-        element: <Carrito />,
-      },
-      {
-        path: "/perfil",
-        element: <Perfil />,
-      },
-      {
-        path: "/perfil/editar",
-        element: <EditProfile />,
-      },
-      {
-        path: "/perfil/direccion",
-        element: <AddAddress />,
-      },
-      {
-        path: "/productos",
-        element: <Producto />,
-      },
-      {
-        path: "/productos/:id",
-        element: <Producto />,
-      },
-      {
-        path: "/favorito",
-        element: <Favorito />,
-      },
-
-      {
-        path: "/categorias",
-        element: <Categoria />,
-      },
-      {
-        path: "/categorias/:id",
-        element: <Categoria />,
-      },
-      {
-        path: "/cancelar",
-        element: <Cancelar />,
-      },
-      {
-        path: "/success",
-        element: <Success />,
-      },
-      {
-        path: "*",
-        element: <NotFound />,
-      },
-      {
-        path: "/tiendas",
-        element: <Tiendas />,
-      },
-      {
-        path: "/contacto",
-        element: <Contacto />,
-      },
-      {
-        path: "/envios",
-        element: <Envios />,
-      },
-      {
-        path: "/Servicio",
-        element: <Servicio />,
-      },
-      {
-        path: "/acerca-de-nosotros",
-        element: <AcercaDeNosotros />,
-      },
-
-
+      { path: "/", element: <App /> },
+      { path: "/carrito", element: <Carrito /> },
+      { path: "/perfil", element: <Perfil /> },
+      { path: "/perfil/editar", element: <EditProfile /> },
+      { path: "/perfil/direccion", element: <AddAddress /> },
+      { path: "/productos", element: <Producto /> },
+      { path: "/productos/:id", element: <Producto /> },
+      { path: "/favorito", element: <Favorito /> },
+      { path: "/categorias", element: <Categoria /> },
+      { path: "/categorias/:id", element: <Categoria /> },
+      { path: "/cancelar", element: <Cancelar /> },
+      { path: "/success", element: <Success /> },
+      { path: "/contacto", element: <Contacto /> },
+      { path: "/servicio", element: <Servicio /> },
+      { path: "/acerca-de-nosotros", element: <AcercaDeNosotros /> },
+      { path: "*", element: <NotFound /> },
     ],
   },
 ]);
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
 
+ReactDOM.createRoot(document.getElementById("root")!).render(
   <ShopifyProvider>
     <AuthProvider>
       <RouterProvider router={router} />
