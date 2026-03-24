@@ -6,7 +6,7 @@ const BackToTop = () => {
 
   useEffect(() => {
     const onScroll = () => {
-      setVisible(window.scrollY > 400);
+      setVisible(window.scrollY > 100);
     };
     window.addEventListener("scroll", onScroll);
     return () => window.removeEventListener("scroll", onScroll);
@@ -18,7 +18,7 @@ const BackToTop = () => {
     <button
       aria-label="Volver arriba"
       onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-      className="fixed bottom-6 right-6 z-50 bg-gray-900 text-white p-3 rounded-full shadow-lg hover:bg-gray-800 transition-colors"
+      className="fixed bottom-20 right-20 lg:bottom-6 lg:right-20 lg:left-auto z-50 bg-gray-900 text-white p-3 rounded-full shadow-lg hover:bg-gray-800 transition-colors"
     >
       <IoChevronUp className="w-5 h-5" />
     </button>

@@ -129,10 +129,10 @@ const ReviewsSection = ({ productId, onAddReview }: ReviewProps) => {
 
       toast.success("¡Reseña enviada!");
 
-      // FIX: No agregar al listado visible hasta que sea aprobada
-      // Solo notificar al padre si corresponde
-      if (onAddReview && responseData.id_producto === pid) {
-        onAddReview(responseData);
+      // Mostrar la reseña inmediatamente en la UI local (optimistic)
+      if (responseData.id_producto === pid) {
+        setReviews((prev) => [...prev, responseData]);
+        if (onAddReview) onAddReview(responseData);
       }
 
       setNewReview({ calificacion: 5, comentario: "" });

@@ -51,8 +51,12 @@ const ProductCard = ({ item, setSearchText }: Props) => {
     } catch {
       // ignore storage failures
     }
+    // Clear search input (if present) so the header dropdown closes
+    try {
+      if (setSearchText) setSearchText("");
+    } catch {}
 
-    navigation(`/productos/${item.idproducto}`);
+    navigation(`/productos/${item.slug || item.idproducto}`);
   };
 
   const reviewCount = item.reseñasCount || item.reviews?.length || 0;

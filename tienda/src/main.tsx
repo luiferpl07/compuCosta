@@ -46,7 +46,7 @@ const router = createBrowserRouter([
       { path: "/perfil/editar", element: <EditProfile /> },
       { path: "/perfil/direccion", element: <AddAddress /> },
       { path: "/productos", element: <Producto /> },
-      { path: "/productos/:id", element: <Producto /> },
+      { path: "/productos/:slug", element: <Producto /> },
       { path: "/favorito", element: <Favorito /> },
       { path: "/categorias", element: <Categoria /> },
       { path: "/categorias/:id", element: <Categoria /> },

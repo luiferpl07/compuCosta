@@ -66,8 +66,8 @@ const readSavedProductsViewState = () => {
 };
 
 const Producto = () => {
-  const { id } = useParams<{ id: string }>();
-  const [savedProductsViewState, setSavedProductsViewState] = useState<ReturnType<typeof readSavedProductsViewState>>(() => (!id ? readSavedProductsViewState() : null));
+  const { slug } = useParams<{ slug: string }>();
+  const [savedProductsViewState, setSavedProductsViewState] = useState<ReturnType<typeof readSavedProductsViewState>>(() => (!slug ? readSavedProductsViewState() : null));
   const [productData, setProductData] = useState<Product | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
@@ -110,10 +110,10 @@ const Producto = () => {
   const navigate = useNavigate();
 
   const requestAbortRef = useRef<AbortController | null>(null);
-  const previousIdRef = useRef<string | undefined>(id);
+  const previousSlugRef = useRef<string | undefined>(slug);
   const restorationHandledRef = useRef(false);
 
-  const [isRestoringState, setIsRestoringState] = useState(() => !!savedProductsViewState && !id);
+  const [isRestoringState, setIsRestoringState] = useState(() => !!savedProductsViewState && !slug);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -131,8 +131,8 @@ const Producto = () => {
   }, []);
 
   useEffect(() => {
-    const wasDetailPage = !!previousIdRef.current;
-    const isReturningToList = wasDetailPage && !id;
+    const wasDetailPage = !!previousSlugRef.current;
+    const isReturningToList = wasDetailPage && !slug;
 
     if (isReturningToList) {
       restorationHandledRef.current = false;
@@ -154,8 +154,8 @@ const Producto = () => {
       }
     }
 
-    previousIdRef.current = id;
-  }, [id]);
+    previousSlugRef.current = slug;
+  }, [slug]);
 
   const totalPages = Math.max(1, Math.ceil(totalProducts / ITEMS_PER_PAGE));
 
@@ -207,7 +207,7 @@ const Producto = () => {
   }, [sortBy]);
 
   const fetchProducts = useCallback(async (pageToLoad: number) => {
-    if (id) return;
+    if (slug) return;
 
     if (requestAbortRef.current) {
       requestAbortRef.current.abort();
@@ -284,7 +284,7 @@ const Producto = () => {
         setLoading(false);
       }
     }
-  }, [id, searchQuery, selectedCategory, priceRange, getCategoriaApiValue, applySort]);
+  }, [slug, searchQuery, selectedCategory, priceRange, getCategoriaApiValue, applySort]);
 
   useEffect(() => {
     return () => {
@@ -297,7 +297,7 @@ const Producto = () => {
 
   // ─── Carga de detalle de producto ─────────────────────────────────────────
   useEffect(() => {
-    if (!id) {
+    if (!slug) {
       setProductData(null);
       setReviews([]);
       return;
@@ -309,7 +309,7 @@ const Producto = () => {
         setImgUrl("");
         setSelectedColor(null);
 
-        const data = await getData(`${config?.baseUrl}${config?.apiPrefix}/products/${id}`);
+        const data = await getData(`${config?.baseUrl}${config?.apiPrefix}/products/${slug}`);
 
         if (data && (!data.activo || (data.cantidad || 0) <= 0)) {
           navigate('/productos');
@@ -319,10 +319,11 @@ const Producto = () => {
 
         setProductData(data);
 
-        const reviewsResponse = await getData(`${config?.baseUrl}${config?.apiPrefix}/reviews?productId=${id}`);
-        if (Array.isArray(reviewsResponse)) {
-          const filteredReviews = reviewsResponse.filter(review => review.id_producto === Number(id));
-          setReviews(filteredReviews);
+        // Usar reseñas incluidas en la respuesta del producto cuando estén disponibles
+        if (data && Array.isArray(data.reviews)) {
+          setReviews(data.reviews as Review[]);
+        } else {
+          setReviews([]);
         }
       } catch (error) {
         console.error("❌ Error al cargar detalle del producto:", error);
@@ -333,11 +334,11 @@ const Producto = () => {
     };
 
     fetchProductData();
-  }, [id, navigate]);
+  }, [slug, navigate]);
 
   // ─── Carga árbol de categorías activas para filtros ──────────────────────
   useEffect(() => {
-    if (id) return;
+    if (slug) return;
 
     const fetchCategories = async () => {
       try {
@@ -358,11 +359,11 @@ const Producto = () => {
     };
 
     fetchCategories();
-  }, [id]);
+  }, [slug]);
 
   // ─── Detecta cambios en URL ───────────────────────────────────────────────
   useEffect(() => {
-    if (id) return;
+    if (slug) return;
 
     const { categoria, busqueda, precioMin, precioMax, oferta, stock } = getUrlParams();
     setSelectedCategory(categoria);
@@ -370,16 +371,16 @@ const Producto = () => {
     setPriceRange([precioMin, precioMax]);
     setOfferOnly(!!oferta);
     setStockOnly(!!stock);
-  }, [location.search, getUrlParams, id]);
+  }, [location.search, getUrlParams, slug]);
 
   // ─── Carga de productos paginados con filtros en servidor ────────────────
   useEffect(() => {
-    if (id) return;
+    if (slug) return;
     fetchProducts(currentPage);
-  }, [id, currentPage, fetchProducts]);
+  }, [slug, currentPage, fetchProducts]);
 
   useLayoutEffect(() => {
-    if (id || !isRestoringState || restorationHandledRef.current || loading || filteredProducts.length === 0) return;
+    if (slug || !isRestoringState || restorationHandledRef.current || loading || filteredProducts.length === 0) return;
 
     const savedProductId = savedProductsViewState?.productId;
     const productAnchor = savedProductId
@@ -397,18 +398,18 @@ const Producto = () => {
     setIsRestoringState(false);
     restorationHandledRef.current = true;
     sessionStorage.removeItem("productsViewState");
-  }, [id, isRestoringState, loading, filteredProducts.length, savedProductsViewState]);
+  }, [slug, isRestoringState, loading, filteredProducts.length, savedProductsViewState]);
 
   // ─── Reordenar resultados actuales sin recargar API ──────────────────────
   useEffect(() => {
-    if (id || filteredProducts.length === 0) return;
+    if (slug || filteredProducts.length === 0) return;
     setFilteredProducts((prev) => applySort(prev));
-  }, [sortBy, id, applySort]);
+  }, [sortBy, slug, applySort]);
 
   // ─── Scroll al top al ver producto individual ─────────────────────────────
   useLayoutEffect(() => {
-    if (id) window.scrollTo({ top: 0, behavior: 'auto' });
-  }, [id]);
+    if (slug) window.scrollTo({ top: 0, behavior: 'auto' });
+  }, [slug]);
 
   // ─── Resuelve la categoría seleccionada en el árbol ───────────────────────
   useEffect(() => {
@@ -487,6 +488,16 @@ const Producto = () => {
         ],
       };
     });
+    // Also update local `reviews` state so averages and counts refresh immediately
+    setReviews((prev) => [
+      ...prev,
+      {
+        ...newReview,
+        fecha_review: newReview.fecha_review instanceof Date
+          ? newReview.fecha_review
+          : new Date(newReview.fecha_review),
+      },
+    ]);
   };
 
   const getPageNumbers = () => {
@@ -556,10 +567,10 @@ const Producto = () => {
   const hasLista2Price = productData?.lista2 && productData.lista2 > 0;
   const showLista2 = isLista2Active && hasLista2Price;
 
-  if (loading && !id && filteredProducts.length === 0 && !isRestoringState) return <Loading />;
+  if (loading && !slug && filteredProducts.length === 0 && !isRestoringState) return <Loading />;
 
   // ─── VISTA INDIVIDUAL DEL PRODUCTO ───────────────────────────────────────
-  if (id && productData) {
+  if (slug && productData) {
     return (
       <Container>
         <div className="flex flex-col">
@@ -728,7 +739,7 @@ const Producto = () => {
 
           <CaracteristicaProducto producto={productData} />
           <ProductDescription product={productData} />
-          <ReviewsSection productId={id} onAddReview={handleAddReview} />
+          <ReviewsSection productId={String(productData.id)} onAddReview={handleAddReview} />
         </div>
       </Container>
     );
