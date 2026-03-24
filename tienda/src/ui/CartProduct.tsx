@@ -7,7 +7,7 @@ import { store } from "../lib/store";
 import toast from "react-hot-toast";
 import { FaCheck } from "react-icons/fa";
 import { MdStar, MdStarHalf, MdOutlineStarOutline } from "react-icons/md";
-import { getProductImage, getProductImageAlt } from "../../utils/imageUtils";
+import { getProductImage, getProductImageAlt } from "../utils/imageUtils";
 import PriceTag from "./PriceTag";
 
 const CartProduct = ({ product }: { product: Product }) => {

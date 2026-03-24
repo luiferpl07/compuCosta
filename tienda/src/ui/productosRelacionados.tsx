@@ -1,4 +1,5 @@
 import React from 'react';
+import { proxyImageUrl } from '../utils/imageUtils';
 import { Star, ShoppingCart } from 'lucide-react';
 
 interface Product {
@@ -68,7 +69,7 @@ const RelatedProducts: React.FC<RelatedProductsProps> = ({ productId }) => {
           <div key={product.id} className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow">
             <div className="relative">
               <img 
-                src={product.imageUrl} 
+                src={proxyImageUrl(product.imageUrl)} 
                 alt={product.name} 
                 className="w-full h-48 object-cover"
               />

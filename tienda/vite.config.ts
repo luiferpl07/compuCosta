@@ -8,6 +8,13 @@ export default defineConfig({
   base: "/",
   server: {
     proxy: {
+      // Route image proxy calls to the admin server in dev
+      "/api/img": {
+        // During local development proxy image requests to the local admin API
+        target: "http://localhost:3000",
+        changeOrigin: true,
+        secure: false,
+      },
       "/api": {
         target: "http://localhost:3000",
         changeOrigin: true,

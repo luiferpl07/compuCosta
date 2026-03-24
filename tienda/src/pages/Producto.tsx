@@ -16,7 +16,7 @@ import SkeletonProductCard from "../ui/SkeletonProductCard";
 import ReviewsSection from "../ui/Review";
 import ProductDescription from "../ui/DescripcionProducto";
 import CaracteristicaProducto from "../ui/CaracteristicaProducto";
-import { getProductImage } from "../../utils/imageUtils";
+import { getProductImage } from "../utils/imageUtils";
 import toast from "react-hot-toast";
 
 interface Review {

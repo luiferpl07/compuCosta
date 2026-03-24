@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { Dialog, DialogPanel, DialogTitle, Transition } from "@headlessui/react";
 import FormatoPrecio from "./FormatoPrecio";
-import { getProductImage } from "../../utils/imageUtils";
+import { getProductImage } from "../utils/imageUtils";
 
 const ProductCardSideNav = ({ product }: { product?: Product }) => {
   const { addToFavorite, favoriteProduct } = store();

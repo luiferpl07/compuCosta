@@ -4,6 +4,7 @@ import "react-responsive-carousel/lib/styles/carousel.min.css";
 import Title from "./Title";
 import { Link } from "react-router-dom";
 import { config } from "../../config";
+import { proxyImageUrl } from "../utils/imageUtils";
 import { getData } from "../lib";
 
 interface Banner {
@@ -90,11 +91,7 @@ const DiscountedBanner = () => {
               {banners.map((banner) => (
                 <div key={banner.id} className="relative w-full h-[200px] md:h-[300px]">
                   <img
-                    src={
-                      banner.imageUrl.startsWith("http")
-                        ? banner.imageUrl
-                        : `${config.baseUrl}${banner.imageUrl}`
-                    }
+                    src={proxyImageUrl(banner.imageUrl.startsWith("http") ? banner.imageUrl : `${config.baseUrl}${banner.imageUrl}`)}
                     alt={banner.title}
                     className="absolute inset-0 w-full h-full object-contain"
                   />

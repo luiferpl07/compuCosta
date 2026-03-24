@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { BannerProps } from "../../type";
 import { getData } from "../lib";
 import { config } from "../../config";
+import { proxyImageUrl } from "../utils/imageUtils";
 
 const HomeBanner = () => {
   const [banners, setBanners] = useState<BannerProps[]>([]);
@@ -79,11 +80,7 @@ const HomeBanner = () => {
         {currentBanner?.imageUrl ? (
           <>
            <img
-              src={
-                currentBanner.imageUrl.startsWith("http")
-                  ? currentBanner.imageUrl
-                  : `${config.baseUrl}${currentBanner.imageUrl}`
-              }
+              src={proxyImageUrl(currentBanner.imageUrl.startsWith("http") ? currentBanner.imageUrl : `${config.baseUrl}${currentBanner.imageUrl}`)}
               alt={`Imagen del banner ${currentBanner.title || ""}`}
               className="absolute inset-0 w-full h-full object-contain"
               onError={(e) => {

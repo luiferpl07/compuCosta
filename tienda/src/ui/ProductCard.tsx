@@ -3,7 +3,7 @@ import { Product } from "../../type";
 import AddToCartBtn from "./AddToCartBtn";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getProductImage, getProductImageAlt } from "../../utils/imageUtils";
+import { getProductImage, getProductImageAlt } from "../utils/imageUtils";
 import ProductCardSideNav from "./ProductCardSideNav";
 
 interface Props {

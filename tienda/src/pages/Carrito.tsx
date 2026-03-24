@@ -5,7 +5,7 @@ import { store } from "../lib/store";
 import CheckoutBtn from "../ui/CheckoutBtn";
 import Container from "../ui/Container";
 import FormatoPrecio from "../ui/FormatoPrecio";
-import { getProductImage, getProductImageAlt } from "../../utils/imageUtils";
+import { getProductImage, getProductImageAlt } from "../utils/imageUtils";
 import toast from "react-hot-toast";
 
 interface TotalAmount {

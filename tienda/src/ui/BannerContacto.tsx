@@ -1,6 +1,7 @@
 
 import { useEffect, useState } from "react";
 import { config } from "../../config";
+import { proxyImageUrl } from "../utils/imageUtils";
 import { getData } from "../lib";
 
 interface Banner {
@@ -63,11 +64,7 @@ const BannerContacto = () => {
       {banner?.imageUrl ? (
         <>
           <img
-            src={
-              banner.imageUrl.startsWith("http")
-                ? banner.imageUrl
-                : `${config?.baseUrl}${banner.imageUrl}`
-            }
+            src={proxyImageUrl(banner.imageUrl.startsWith("http") ? banner.imageUrl : `${config?.baseUrl}${banner.imageUrl}`)}
             alt={banner.title || "Banner de contacto"}
             className="absolute inset-0 w-full h-full object-contain"
             onError={(e) => {

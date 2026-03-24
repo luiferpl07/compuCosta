@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import AddToCartBtn from "./AddToCartBtn";
 import FormatoPrecio from "./FormatoPrecio";
-import { getProductImage, getProductImageAlt } from "../../utils/imageUtils";
+import { getProductImage, getProductImageAlt } from "../utils/imageUtils";
 
 
 const FavoriteProduct = ({ product }: { product: Product }) => {

@@ -8,6 +8,8 @@ import { useEffect, useState } from "react";
 import { FaMinus, FaPlus } from "react-icons/fa";
 import { Link } from "react-router-dom";
 import { OrderTypes, Product } from "../../type";
+import { proxyImageUrl } from "../utils/imageUtils";
+import { config } from "../../config";
 import { db } from "../lib/firebase";
 import { store } from "../lib/store";
 import Container from "../ui/Container";
@@ -123,7 +125,7 @@ const Pedidos = () => {
                                   className="h-20 w-20 flex-none sm:h-40 sm:w-40 rounded-lg bg-gray-100 border border-gray-300 hover:border-skyText overflow-hidden"
                                 >
                                   <img
-                                    src={item?.imagenes[0]}
+                                    src={proxyImageUrl(item?.imagenes?.[0] ? (item.imagenes[0].startsWith("http") ? item.imagenes[0] : `${config.baseUrl}${item.imagenes[0]}`) : '/placeholder.png')}
                                     alt="Imagen del producto"
                                     className="h-full w-full object-cover object-center hover:scale-110 duration-300"
                                   />
