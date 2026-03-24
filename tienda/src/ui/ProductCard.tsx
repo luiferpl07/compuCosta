@@ -29,6 +29,20 @@ const ProductCard = ({ item, setSearchText }: Props) => {
 
   const mainImage = getProductImage(item?.imagenes);
   const fallbackImageAlt = getProductImageAlt(item?.imagenes, item?.nombreproducto);
+  const outOfStock = (() => {
+    // Prefer explicit `cantidad` when provided by the API
+    if (typeof item.cantidad !== 'undefined' && item.cantidad !== null) {
+      return Number(item.cantidad) <= 0;
+    }
+
+    // Fallback to `enStock` boolean only if cantidad is not provided
+    if (typeof item.enStock !== 'undefined' && item.enStock !== null) {
+      return item.enStock === false;
+    }
+
+    // If neither field is reliable, assume in-stock to avoid false positives
+    return false;
+  })();
 
   const handleProduct = () => {
     const scrollY = Math.max(
@@ -102,8 +116,8 @@ const ProductCard = ({ item, setSearchText }: Props) => {
   };
 
   return (
-    <div data-product-id={item.idproducto} className="group border border-gray-200 rounded-lg p-1 overflow-hidden hover:border-amber-300 duration-200 cursor-pointer relative">
-      <div className="w-full h-60 relative p-2">
+    <div data-product-id={item.idproducto} className="group border border-gray-200 rounded-lg p-1 overflow-hidden hover:border-amber-300 duration-200 cursor-pointer relative min-w-0">
+      <div className={`w-full relative p-2 ${outOfStock ? 'opacity-80' : ''} h-48 sm:h-56 md:h-60`}>
         {/* Badge de descuento */}
         {showLista2 && percentage > 0 && item.lista2 > item.lista1 && (
           <span
@@ -119,28 +133,33 @@ const ProductCard = ({ item, setSearchText }: Props) => {
             onClick={handleProduct}
             src={mainImage}
             alt={fallbackImageAlt}
-            className="w-full h-full object-contain hover:scale-110 duration-300"
+            className={`w-full h-full object-cover object-center duration-300 ${outOfStock ? 'filter grayscale' : 'hover:scale-105'}`}
             loading="lazy"
           />
         </div>
 
-        
+        {outOfStock && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+            <span className="bg-black/70 text-white px-3 py-1 rounded-full text-sm font-semibold">Agotado</span>
+          </div>
+        )}
+
         <ProductCardSideNav product={item} />
       </div>
 
-      <div className="flex flex-col gap-2 px-2 pb-2">
+      <div className="flex flex-col gap-3 px-3 pb-3">
         <h3 className="text-xs uppercase font-semibold text-textoNegro/70">
           {getCategoriesDisplay(item.categorias)}
         </h3>
 
         <h2
           onClick={handleProduct}
-          className="text-lg font-bold line-clamp-2 cursor-pointer hover:text-amber-600 duration-200"
+          className="text-base sm:text-lg font-bold line-clamp-2 cursor-pointer hover:text-amber-600 duration-200"
         >
           {item?.nombreproducto || 'Producto sin nombre'}
         </h2>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2 mt-1">
           <div className="flex items-center text-base">
             {[...Array(5)].map((_, index) => {
               const ratingValue = index + 1;
@@ -171,8 +190,8 @@ const ProductCard = ({ item, setSearchText }: Props) => {
           )}
         </div>
 
-        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          <AddToCartBtn product={item} className="flex-grow" />
+        <div className="flex items-center gap-2 mt-3" onClick={(e) => e.stopPropagation()}>
+          <AddToCartBtn product={item} className="flex-grow" disabled={outOfStock} />
         </div>
       </div>
     </div>

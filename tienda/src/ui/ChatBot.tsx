@@ -470,8 +470,10 @@ const ChatBot: React.FC<ChatBotProps> = ({ className = '' }) => {
     setIsOpen(prev => {
       const newState = !prev;
       if (newState) {
+        // opening: clear minimized state and mark as read
+        setIsMinimized(false);
         markMessagesAsRead();
-        
+
         // ✨ Verificar si debe mostrar formulario de nombre cuando se abre el chat
         console.log('📝 Chat abierto, verificando si mostrar formulario de nombre...');
         const shouldShow = shouldShowNameForm();
@@ -488,23 +490,18 @@ const ChatBot: React.FC<ChatBotProps> = ({ className = '' }) => {
         // Al cerrar, ocultar formulario de nombre si está visible
         setShowNameForm(false);
         setTempUserName('');
+        // ensure minimized flag cleared when fully closed
+        setIsMinimized(false);
       }
       return newState;
     });
   };
 
-  // Toggle minimize
+  // Toggle minimize - in the new behaviour minimizing will hide the window and show only the floating button
   const toggleMinimize = () => {
-    setIsMinimized(prev => {
-      const newState = !prev;
-      if (!newState) {
-        markMessagesAsRead();
-        setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }, 100);
-      }
-      return newState;
-    });
+    setIsMinimized(true);
+    // hide the window (show only floating button)
+    setIsOpen(false);
   };
 
   const toggleNotifications = () => {
@@ -773,26 +770,26 @@ const ChatBot: React.FC<ChatBotProps> = ({ className = '' }) => {
   }, []);
 
   return (
-    <div className={`fixed bottom-4 right-4 z-50 ${className}`}>
+    <div className={`fixed bottom-4 left-4 right-4 sm:right-4 sm:left-auto z-50 flex justify-end ${className}`}>
       {/* Botón flotante */}
       {!isOpen && (
         <button
           onClick={toggleChat}
-          className="bg-red-500 hover:bg-red-600 text-white rounded-full p-4 shadow-lg transition-all duration-200 hover:scale-110 relative group"
+          className="bg-red-500 hover:bg-red-600 text-white rounded-full p-4 shadow-lg transition-all duration-200 hover:scale-110 relative group flex-shrink-0"
           aria-label="Abrir chat"
         >
           <MessageCircle className="w-6 h-6" />
-          
+
           {unreadCount > 0 && (
             <span className="absolute -top-2 -right-2 bg-green-500 text-white text-xs font-bold rounded-full min-w-6 h-6 flex items-center justify-center animate-pulse shadow-lg border-2 border-white">
               {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           )}
-          
+
           {hasNewMessage && (
             <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-75"></span>
           )}
-          
+
           <div className="absolute bottom-full right-0 mb-2 bg-black text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
             {unreadCount > 0 ? `${unreadCount} mensajes nuevos` : 'Abrir chat de soporte'}
           </div>
@@ -801,7 +798,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ className = '' }) => {
 
       {/* Ventana de chat */}
       {isOpen && (
-        <div className="bg-white rounded-lg shadow-2xl border border-gray-200 w-96 h-[500px] flex flex-col animate-in slide-in-from-bottom-4 duration-300">
+        <div className="bg-white rounded-lg shadow-2xl border border-gray-200 w-full sm:w-96 max-w-md h-[60vh] sm:h-[500px] flex flex-col animate-in slide-in-from-bottom-4 duration-300 overflow-hidden z-60">
           {/* Header */}
           <div className="flex items-center justify-between p-4 bg-red-500 text-white rounded-t-lg">
             <div className="flex items-center space-x-2">
@@ -972,14 +969,34 @@ const ChatBot: React.FC<ChatBotProps> = ({ className = '' }) => {
 
           {/* Vista minimizada */}
           {isMinimized && (
-            <div className="p-4 text-center">
-              <p className="text-sm text-gray-600">Chat minimizado</p>
-              {hasNewMessage && (
-                <p className="text-xs text-green-600 mt-1 animate-pulse">💬 Nuevo mensaje recibido</p>
-              )}
-              {adminTyping && (
-                <p className="text-xs text-blue-600 mt-1">✍️ Admin está escribiendo...</p>
-              )}
+            <div className="p-3 flex items-center justify-between">
+              <div className="text-left">
+                <p className="text-sm text-gray-600">Chat minimizado</p>
+                {hasNewMessage && (
+                  <p className="text-xs text-green-600 mt-1 animate-pulse">💬 Nuevo mensaje recibido</p>
+                )}
+                {adminTyping && (
+                  <p className="text-xs text-blue-600 mt-1">✍️ Admin está escribiendo...</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={toggleMinimize}
+                  className="px-3 py-2 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600 transition-colors"
+                  aria-label="Restaurar chat"
+                >
+                  Abrir
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleChat}
+                  className="px-2 py-2 bg-gray-100 text-gray-700 rounded-md text-sm hover:bg-gray-200 transition-colors"
+                  aria-label="Cerrar chat"
+                >
+                  Cerrar
+                </button>
+              </div>
             </div>
           )}
         </div>

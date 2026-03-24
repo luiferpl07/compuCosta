@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { config } from "../../config";
 import { getData } from "../lib";
 import { RotatingLines } from "react-loader-spinner";
@@ -10,6 +10,8 @@ interface FiltersProps {
   priceRange: [number, number];
   onCategoryChange: (category: string) => void;
   onPriceRangeChange: (range: [number, number]) => void;
+  includeOutOfStock?: boolean;
+  onIncludeOutOfStockChange?: (v: boolean) => void;
 }
 
 const MAX_PRICE = 20000000;
@@ -19,6 +21,8 @@ const Filters = ({
   priceRange,
   onCategoryChange,
   onPriceRangeChange,
+  includeOutOfStock = false,
+  onIncludeOutOfStockChange,
 }: FiltersProps) => {
   const [categories, setCategories] = useState<CategoryProps[]>([]);
   const [subcategoriesMap, setSubcategoriesMap] = useState<Record<number, CategoryProps[]>>({});
@@ -27,6 +31,7 @@ const Filters = ({
   const [categoryQuery, setCategoryQuery] = useState("");
   const [isCategoriesOpen, setIsCategoriesOpen] = useState(true);
   const [isPriceOpen, setIsPriceOpen] = useState(true);
+  const scrollableRef = useRef<HTMLDivElement | null>(null);
   const [tempPriceRange, setTempPriceRange] = useState<[number, number]>([0, MAX_PRICE]);
   const [categorySelected, setCategorySelected] = useState<CategoryProps | null>(null);
 
@@ -102,7 +107,6 @@ const Filters = ({
 
   const handleSelectCategory = (slug: string) => {
     setCategoryQuery("");
-    setIsCategoriesOpen(false);
     onCategoryChange(slug);
   };
 
@@ -149,14 +153,27 @@ const Filters = ({
             <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 truncate">Refina tu búsqueda</p>
             <h3 className="text-base font-bold text-gray-900 truncate">Filtros</h3>
           </div>
-          <button
-            onClick={handleClearAll}
-            className="flex-none inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 transition-colors hover:text-textoRojo"
-            aria-label="Limpiar todos los filtros"
-          >
-            <X className="h-3.5 w-3.5" />
-            <span className="hidden xs:inline">Limpiar</span>
-          </button>
+          <div className="flex items-center gap-3">
+            {typeof onIncludeOutOfStockChange === 'function' && (
+              <label className="inline-flex items-center gap-2 text-xs text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={!!includeOutOfStock}
+                  onChange={(e) => onIncludeOutOfStockChange?.(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                Incluir agotados
+              </label>
+            )}
+            <button
+              onClick={handleClearAll}
+              className="flex-none inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 transition-colors hover:text-textoRojo"
+              aria-label="Limpiar todos los filtros"
+            >
+              <X className="h-3.5 w-3.5" />
+              <span className="hidden xs:inline">Limpiar</span>
+            </button>
+          </div>
         </div>
 
         <div className="mb-3 flex flex-wrap gap-1.5">
@@ -188,8 +205,13 @@ const Filters = ({
             onClick={() => {
               setIsPriceOpen(true);
               setTimeout(() => {
-                const element = document.getElementById("price-section");
-                element?.scrollIntoView({ behavior: "smooth", block: "start" });
+                const el = document.getElementById("price-section");
+                if (scrollableRef.current && el instanceof HTMLElement) {
+                  const top = el.offsetTop;
+                  scrollableRef.current.scrollTo({ top: Math.max(top - 8, 0), behavior: "smooth" });
+                } else {
+                  el?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }
               }, 100);
             }}
             className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-textoRojo px-3 py-2 text-xs font-bold text-white shadow-md transition-all duration-200 hover:bg-red-700"
@@ -201,7 +223,7 @@ const Filters = ({
       </div>
 
       {/* Scrollable Body Content */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 scrollbar-hide relative min-h-0">
+      <div ref={scrollableRef} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 scrollbar-hide relative min-h-0">
         {loading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/75">
             <RotatingLines strokeColor="#e53e3e" strokeWidth="5" animationDuration="0.75" width="40" visible={true} />

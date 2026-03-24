@@ -18,9 +18,9 @@ const BackToTop = () => {
     <button
       aria-label="Volver arriba"
       onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-      className="fixed bottom-20 right-20 lg:bottom-6 lg:right-20 lg:left-auto z-50 bg-gray-900 text-white p-3 rounded-full shadow-lg hover:bg-gray-800 transition-colors"
+      className="fixed bottom-28 right-4 sm:bottom-20 sm:right-6 lg:bottom-6 lg:right-6 z-60 bg-gray-900 text-white p-4 sm:p-3 rounded-full shadow-lg hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-red-200"
     >
-      <IoChevronUp className="w-5 h-5" />
+      <IoChevronUp className="w-6 h-6 sm:w-5 sm:h-5" />
     </button>
   );
 };

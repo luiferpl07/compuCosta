@@ -31,6 +31,7 @@ interface CategoryWithSubcategories extends CategoryProps {
 
 const Header = () => {
   const [searchText, setSearchText] = useState("");
+  const [includeOutOfStock, setIncludeOutOfStock] = useState(false);
   const [categories, setCategories] = useState<CategoryWithSubcategories[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -145,7 +146,8 @@ const Header = () => {
         params.set("limit", "10");
         params.set("search", sanitizedQuery);
         params.set("visibilidad", "visibles");
-        params.set("cantidadMin", "1");
+        if (!includeOutOfStock) params.set("cantidadMin", "1");
+        if (includeOutOfStock) params.set("includeOut", "1");
 
         const response = await fetch(
           `${config?.baseUrl}${config?.apiPrefix}/products?${params.toString()}`,
@@ -183,7 +185,60 @@ const Header = () => {
         searchAbortRef.current.abort();
       }
     };
-  }, [searchText]);
+  }, [searchText, includeOutOfStock]);
+
+  // Trigger an immediate search (used when toggling includeOutOfStock)
+  const triggerSearchNow = async (includeFlag?: boolean) => {
+    const query = searchText.toLowerCase().trim();
+    const sanitizedQuery = query.replace(/[<>{}\\]/g, "");
+
+    if (!sanitizedQuery) {
+      setFilteredProducts([]);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    if (searchAbortRef.current) {
+      searchAbortRef.current.abort();
+    }
+
+    try {
+      const controller = new AbortController();
+      searchAbortRef.current = controller;
+
+      const terms = sanitizedQuery.split(/\s+/).filter(t => t.length >= 2);
+      if (terms.length === 0) {
+        setFilteredProducts([]);
+        setIsSearching(false);
+        return;
+      }
+
+      const params = new URLSearchParams();
+      params.set("page", "1");
+      params.set("limit", "10");
+      params.set("search", sanitizedQuery);
+      params.set("visibilidad", "visibles");
+      if (!((typeof includeFlag === 'undefined') ? includeOutOfStock : includeFlag)) params.set("cantidadMin", "1");
+      if ((typeof includeFlag !== 'undefined' ? includeFlag : includeOutOfStock)) params.set("includeOut", "1");
+
+      const response = await fetch(
+        `${config?.baseUrl}${config?.apiPrefix}/products?${params.toString()}`,
+        { signal: controller.signal }
+      );
+
+      if (!response.ok) throw new Error(`Error HTTP ${response.status}`);
+
+      const data = await response.json();
+      const candidates: Product[] = Array.isArray(data?.productos) ? data.productos.slice(0, 10) : [];
+      setFilteredProducts(candidates);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setFilteredProducts([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
 
   // ─── Handlers de hover para mega menú ────────────────────────────────────
   const handleMouseEnter = () => {
@@ -231,14 +286,17 @@ const Header = () => {
   // ─── Eventos globales ─────────────────────────────────────────────────────
   useEffect(() => {
     const handleScroll = () => {
-      if (mobileMenuOpen || mobileSearchOpen) {
+      // Close only the mobile menu on scroll. Do NOT auto-close the mobile search here,
+      // because focusing the search input or the virtual keyboard can trigger viewport
+      // scroll events on mobile and would immediately close the search (causing a
+      // flicker). This preserves the search UX on small screens.
+      if (mobileMenuOpen) {
         setMobileMenuOpen(false);
-        setMobileSearchOpen(false);
       }
     };
-    window.addEventListener("scroll", handleScroll);
+    window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
-  }, [mobileMenuOpen, mobileSearchOpen]);
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -284,9 +342,10 @@ const Header = () => {
   const hasActiveCategories = categories.length > 0;
 
   return (
-    <div role="navigation" aria-label="Main navigation" className="w-full bg-gradient-to-r from-white to-gray-50 sticky top-0 z-50 shadow-sm border-b border-gray-100">
-      {/* ── Barra superior ───────────────────────────────────────────────── */}
-      <div className="max-w-screen-xl mx-auto min-h-[4.5rem] sm:min-h-[5.5rem] flex items-center justify-between px-4 sm:px-6 lg:px-8 py-2">
+    <>
+    <div role="navigation" aria-label="Main navigation" className="site-header w-full bg-gradient-to-r from-white to-gray-50 fixed top-0 left-0 right-0 z-50 shadow-sm border-b border-gray-100">
+      {/* ── Barra superior (altura fija por breakpoint) ────────────────────── */}
+      <div className="max-w-screen-xl mx-auto h-[48px] sm:h-[56px] lg:h-[72px] flex items-center justify-between px-4 sm:px-6 lg:px-8 overflow-x-hidden">
         {/* Botón menú móvil */}
         <button
           className="lg:hidden group relative text-2xl sm:text-3xl mr-2 sm:mr-3 flex items-center justify-center
@@ -298,11 +357,11 @@ const Header = () => {
         </button>
 
         {/* Logo */}
-        <Link to={"/"} className="flex-shrink-0 group">
+        <Link to={"/"} className="flex-shrink-0 flex items-center group h-full">
           <img
             src={logo}
             alt="Logo"
-            className="w-24 h-auto sm:w-28 md:w-32 lg:w-48 max-h-14 sm:max-h-16 object-contain
+            className="w-auto h-full max-h-[40px] sm:max-h-[48px] lg:max-h-[64px] object-contain
               group-hover:scale-105 transition-transform duration-300 filter drop-shadow-sm"
           />
         </Link>
@@ -311,7 +370,7 @@ const Header = () => {
         <div role="search" aria-label="Buscar productos" className="hidden lg:flex max-w-md xl:max-w-2xl w-full mx-6 relative search-container">
           <div
             className={`flex items-center w-full relative rounded-2xl bg-white
-              border-2 transition-all duration-300 px-4 xl:px-5 py-3 shadow-sm hover:shadow-md
+              border-2 transition-all duration-300 px-3 xl:px-4 py-1 shadow-sm hover:shadow-md max-h-[56px] sm:max-h-[52px] lg:max-h-[48px]
               ${searchFocused || searchText
                 ? "border-textoRojo shadow-lg ring-4 ring-red-50"
                 : "border-gray-200 hover:border-gray-300"
@@ -327,10 +386,34 @@ const Header = () => {
               onChange={e => setSearchText(e.target.value)}
               value={searchText}
               onFocus={() => setSearchFocused(true)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const params = new URLSearchParams();
+                  if (searchText.trim()) params.set('busqueda', searchText.trim());
+                  if (includeOutOfStock) params.set('includeOut', '1');
+                  navigate(`/productos${params.toString() ? `?${params.toString()}` : ''}`);
+                }
+              }}
               placeholder={isIndexReady ? "¿Qué estás buscando hoy?" : "Cargando productos..."}
               className="w-full bg-transparent text-gray-800 text-sm xl:text-base outline-none
-                placeholder:text-gray-400 placeholder:font-normal font-medium"
+                placeholder:text-gray-400 placeholder:font-normal font-medium py-2"
             />
+            <div className="hidden lg:flex items-center ml-3 gap-2">
+              <label className="inline-flex items-center text-xs text-gray-500">
+                <input
+                  type="checkbox"
+                  checked={includeOutOfStock}
+                  onChange={(e) => {
+                    const newVal = e.target.checked;
+                    setIncludeOutOfStock(newVal);
+                    triggerSearchNow(newVal);
+                  }}
+                  className="h-4 w-4 mr-1"
+                />
+                Incluir agotados
+              </label>
+            </div>
             {searchText && (
               <button
                 onClick={clearSearch}
@@ -356,7 +439,7 @@ const Header = () => {
         </button>
 
         {/* Iconos usuario / favoritos / carrito */}
-        <div className="flex items-center gap-x-2 sm:gap-x-3 md:gap-x-4 lg:gap-x-5 text-xl sm:text-2xl">
+        <div className="flex items-center gap-x-1.5 sm:gap-x-3 md:gap-x-4 lg:gap-x-5 text-lg sm:text-xl md:text-2xl pr-2 sm:pr-4">
           {sessionUser && (
             <Link
               to={"/perfil"}
@@ -382,7 +465,7 @@ const Header = () => {
           <Link
             to={"/perfil"}
             title={userDisplayName || "Mi perfil"}
-            className="group relative hover:text-textoRojo transition-all duration-300 p-1.5 sm:p-2 rounded-xl hover:bg-red-50 flex-shrink-0"
+            className="hidden sm:inline-flex group relative hover:text-textoRojo transition-all duration-300 p-1.5 sm:p-2 rounded-xl hover:bg-red-50 flex-shrink-0"
           >
             <FiUser className="w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 text-gray-800 group-hover:text-textoRojo transition-all duration-200" />
           </Link>
@@ -433,6 +516,34 @@ const Header = () => {
               </button>
             )}
           </div>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <label className="inline-flex items-center text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={includeOutOfStock}
+                onChange={(e) => {
+                  const newVal = e.target.checked;
+                  setIncludeOutOfStock(newVal);
+                  triggerSearchNow(newVal);
+                }}
+                className="h-4 w-4 mr-2"
+              />
+              Incluir agotados
+            </label>
+            <button
+              onClick={() => {
+                const params = new URLSearchParams();
+                if (searchText.trim()) params.set('busqueda', searchText.trim());
+                if (includeOutOfStock) params.set('includeOut', '1');
+                navigate(`/productos${params.toString() ? `?${params.toString()}` : ''}`);
+                clearSearch();
+                setMobileSearchOpen(false);
+              }}
+              className="px-4 py-2 bg-textoRojo text-white rounded-lg font-semibold"
+            >
+              Buscar
+            </button>
+          </div>
         </div>
       )}
 
@@ -478,21 +589,21 @@ const Header = () => {
                 ))}
               </div>
 
-              {filteredProducts.length === 10 && (
-                <div className="mt-6 text-center">
-                  <Link
-                    to={`/productos?busqueda=${encodeURIComponent(searchText)}`}
-                    onClick={clearSearch}
-                    className="inline-flex items-center gap-2 py-3 px-6 bg-gradient-to-r from-textoRojo to-red-600
-                      text-white rounded-xl hover:from-red-600 hover:to-red-700
-                      transition-all duration-300 font-semibold shadow-lg hover:shadow-xl
-                      hover:scale-105 transform"
-                  >
-                    <FaChevronRight className="w-4 h-4" />
-                    Ver más resultados
-                  </Link>
-                </div>
-              )}
+                  {filteredProducts.length === 10 && (
+                    <div className="mt-6 text-center">
+                      <Link
+                        to={`/productos?busqueda=${encodeURIComponent(searchText)}${includeOutOfStock ? `&includeOut=1` : ``}`}
+                        onClick={clearSearch}
+                        className="inline-flex items-center gap-2 py-3 px-6 bg-gradient-to-r from-textoRojo to-red-600
+                          text-white rounded-xl hover:from-red-600 hover:to-red-700
+                          transition-all duration-300 font-semibold shadow-lg hover:shadow-xl
+                          hover:scale-105 transform"
+                      >
+                        <FaChevronRight className="w-4 h-4" />
+                        Ver más resultados
+                      </Link>
+                    </div>
+                  )}
             </>
           ) : (
             <div className="py-8 sm:py-12 bg-gradient-to-br from-gray-50 to-red-50 w-full flex flex-col
@@ -519,7 +630,8 @@ const Header = () => {
 
       {/* ── Barra de navegación ───────────────────────────────────────────── */}
       <div className="w-full bg-gradient-to-r from-textoRojo via-red-600 to-textoRojo text-white shadow-lg">
-        <Container className="py-3 max-w-5xl flex items-center gap-3 sm:gap-4 md:gap-6 justify-between">
+      {/* Barra roja (altura fija por breakpoint) */}
+      <Container className="h-[36px] md:h-[40px] lg:h-[48px] flex items-center max-w-5xl gap-2 sm:gap-3 md:gap-4 justify-between px-4">
 
           {hasActiveCategories && (
             <div
@@ -528,7 +640,7 @@ const Header = () => {
               onMouseLeave={handleMouseLeave}
             >
               <div className="inline-flex items-center gap-2 sm:gap-3 rounded-xl bg-white/10 backdrop-blur-sm
-                hover:bg-white/20 py-2 sm:py-2.5 px-3 sm:px-4 text-sm sm:text-base lg:text-lg
+                hover:bg-white/20 py-1 sm:py-1 px-3 sm:px-3 text-sm sm:text-base lg:text-base
                 font-bold text-white cursor-pointer transition-all duration-300 border border-white/20
                 hover:border-white/40 hover:shadow-lg group-hover:scale-105">
                 <IoGridOutline className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -651,7 +763,7 @@ const Header = () => {
                 to={link}
                 key={title}
                 className="group relative uppercase text-xs xl:text-sm font-bold text-white/90
-                  hover:text-white transition-all duration-300 py-2 px-3 rounded-lg
+                  hover:text-white transition-all duration-300 py-0.5 px-3 rounded-lg
                   hover:bg-white/10 flex items-center gap-2 whitespace-nowrap"
               >
                 <span className="group-hover:scale-110 transition-transform duration-200">{icon}</span>
@@ -771,6 +883,8 @@ const Header = () => {
         </div>
       )}
     </div>
+    {/* Spacer removed: Layout now applies dynamic padding-top based on header height */}
+    </>
   );
 };
 

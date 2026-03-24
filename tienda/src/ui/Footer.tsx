@@ -7,114 +7,102 @@ import { logo } from "../assets";
 const Footer = () => {
   return (
     <div className="bg-white text-gray-800 border-t border-gray-200">
-      <Container className="py-8">
-        {/* Sección principal - más compacta */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          
-          {/* Logo y redes sociales */}
+      <Container className="py-12">
+        {/* Propuesta: misma paleta, logos y acceso a redes más grandes */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8 items-start">
+
+          {/* Logo y redes sociales (más grandes) */}
           <div className="flex flex-col gap-4">
-            <div className="flex items-center">
-              <img src={logo} alt="Compucosta Logo" className="w-28 h-auto object-contain" />
+              <div className="flex items-center">
+              <img src={logo} alt="Compucosta Logo" className="w-48 sm:w-56 md:w-64 h-auto object-contain" />
             </div>
-            
-            {/* Redes sociales */}
-            <div className="flex flex-col gap-2">
-              <h4 className="text-gray-800 font-semibold text-base">Síguenos</h4>
-              <div className="flex gap-3">
-                <a 
-                  href="https://www.facebook.com/profile.php?id=100067652344787" 
-                  target="_blank" 
+            <p className="text-gray-600 max-w-sm">Equipos, repuestos y servicio técnico con atención local. Síguenos para ofertas y novedades.</p>
+
+            {/* Redes sociales con mayor tamaño y botones descriptivos */}
+            <div className="flex flex-col gap-3 mt-2">
+              <h4 className="text-gray-800 font-semibold text-lg">Síguenos</h4>
+              <div className="flex flex-wrap gap-3 mt-1">
+                <a
+                  href="https://www.facebook.com/profile.php?id=100067652344787"
+                  target="_blank"
                   rel="noopener noreferrer"
-                  className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+                  className="flex items-center gap-3 px-4 py-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                  aria-label="Facebook Compucosta"
                 >
-                  <Facebook className="w-5 h-5" />
+                  <Facebook className="w-6 h-6 text-blue-600" />
+                  <span className="text-sm text-gray-800 font-medium">Facebook</span>
                 </a>
-                <a 
-                  href="https://www.instagram.com/compucosta" 
-                  target="_blank" 
+
+                <a
+                  href="https://www.instagram.com/compucosta"
+                  target="_blank"
                   rel="noopener noreferrer"
-                  className="p-2 bg-pink-50 text-pink-600 hover:bg-pink-100 rounded-lg transition-colors"
+                  className="flex items-center gap-3 px-4 py-3 bg-pink-50 hover:bg-pink-100 rounded-lg transition-colors"
+                  aria-label="Instagram Compucosta"
                 >
-                  <Instagram className="w-5 h-5" />
+                  <Instagram className="w-6 h-6 text-pink-600" />
+                  <span className="text-sm text-gray-800 font-medium">Instagram</span>
                 </a>
               </div>
             </div>
           </div>
 
-          {/* Información de contacto */}
-          <div className="flex flex-col gap-3">
-            <h3 className="text-xl font-semibold text-gray-800">Contáctanos</h3>
-            <div className="flex flex-col gap-2 text-base">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-red-600" />
-                <span className="text-gray-600">Cr20 19-09 Ford, Sincelejo</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-red-600" />
-                <span className="text-gray-600">Centro Comercial Guacari, Sincelejo</span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Phone className="w-5 h-5 text-red-600" />
-                <div className="flex flex-col">
-                  <a href="tel:+573106206752" className="text-gray-600 hover:text-red-600 transition-colors">
-                    +57 310 620 6752
-                  </a>
-                  <a href="tel:+573126790330" className="text-gray-600 hover:text-red-600 transition-colors">
-                    +57 312 679 0330
-                  </a>
+          {/* Información de contacto (más legible) */}
+          <div className="flex flex-col gap-4">
+            <h3 className="text-2xl font-semibold text-gray-800">Contáctanos</h3>
+            <div className="flex flex-col gap-3 text-base text-gray-700">
+              <div className="flex items-start gap-3">
+                <MapPin className="w-6 h-6 text-red-600 flex-shrink-0" />
+                <div>
+                  <div className="font-medium">Cr20 19-09 Ford, Sincelejo</div>
+                  <div className="text-sm text-gray-600">Centro Comercial Guacari, Sincelejo</div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <Mail className="w-5 h-5 text-red-600" />
-                <a 
-                  href="mailto:compucostacomercial@gmail.com" 
-                  className="text-gray-600 hover:text-red-600 transition-colors text-sm"
+              <div className="flex items-start gap-3">
+                <Phone className="w-6 h-6 text-red-600 flex-shrink-0" />
+                <div className="flex flex-col">
+                  <a href="tel:+573106206752" className="hover:text-red-600">+57 310 620 6752</a>
+                  <a href="tel:+573126790330" className="hover:text-red-600">+57 312 679 0330</a>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <Mail className="w-6 h-6 text-red-600 flex-shrink-0" />
+                <a
+                  href="mailto:compucostacomercial@gmail.com"
+                  className="hover:text-red-600 text-sm"
                 >
                   compucostacomercial@gmail.com
                 </a>
               </div>
             </div>
           </div>
-          {/* Enlaces rápidos */}
-          <div className="flex flex-col gap-3">
-            <h3 className="text-xl font-semibold text-gray-800">Enlaces</h3>
-            <div className="flex flex-col gap-1 text-base">
-              <Link 
-                to="/Servicio" 
-                className="text-gray-600 hover:text-red-600 transition-colors"
-              >
-                Servicios
-              </Link>
-              <Link 
-                to="/productos" 
-                className="text-gray-600 hover:text-red-600 transition-colors"
-              >
-                Productos
-              </Link>
-              <Link 
-                to="/acerca-de-nosotros" 
-                className="text-gray-600 hover:text-red-600 transition-colors"
-              >
-                Acerca de Nosotros
-              </Link>
+
+          {/* Enlaces (más visibles) */}
+          <div className="flex flex-col gap-4">
+            <h3 className="text-2xl font-semibold text-gray-800">Enlaces</h3>
+            <div className="flex flex-col gap-3 text-base">
+              <Link to="/Servicio" className="text-gray-700 hover:text-red-600 transition-colors font-medium">Servicios</Link>
+              <Link to="/productos" className="text-gray-700 hover:text-red-600 transition-colors font-medium">Productos</Link>
+              <Link to="/acerca-de-nosotros" className="text-gray-700 hover:text-red-600 transition-colors font-medium">Acerca de Nosotros</Link>
+              <Link to="/Contacto" className="text-gray-700 hover:text-red-600 transition-colors font-medium">Contacto</Link>
             </div>
           </div>
         </div>
 
         {/* Línea divisoria */}
-        <div className="my-6">
+        <div className="my-8">
           <div className="h-px bg-gray-200"></div>
         </div>
 
         {/* Sección inferior */}
-        <div className="flex flex-col md:flex-row items-center gap-2 justify-between text-base">
-          <p className="text-gray-500">
-            © 2025 Compucosta. Todos los derechos reservados.
+        <div className="flex flex-col md:flex-row items-center gap-4 justify-between text-base text-gray-600">
+          <p>
+            © {new Date().getFullYear()} Compucosta. Todos los derechos reservados.
           </p>
-          <div className="flex items-center gap-2">
-            <span className="text-gray-500">Desarrollado por</span>
+          <div className="flex items-center gap-4 text-sm text-gray-700">
+            <span>Desarrollado por</span>
             <span className="text-red-600 font-semibold">ParqueSoft Sucre</span>
           </div>
         </div>

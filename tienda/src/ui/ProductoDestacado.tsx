@@ -13,6 +13,7 @@ const ProductoDestacado = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const sliderRef = useRef<Slider>(null);
+  const [isMobileView, setIsMobileView] = useState<boolean>(false);
 
   const settings = {
     dots: products.length > 4,
@@ -24,8 +25,9 @@ const ProductoDestacado = () => {
     arrows: false,
     responsive: [
       { breakpoint: 1024, settings: { slidesToShow: 3, slidesToScroll: 1, arrows: false } },
-      { breakpoint: 640,  settings: { slidesToShow: 2, slidesToScroll: 1, arrows: false } },
-      { breakpoint: 480,  settings: { slidesToShow: 1, slidesToScroll: 1, arrows: false, dots: false, centerMode: true, centerPadding: "40px" } }
+      { breakpoint: 768,  settings: { slidesToShow: 2, slidesToScroll: 1, arrows: false } },
+      { breakpoint: 640,  settings: { slidesToShow: 1, slidesToScroll: 1, arrows: false, dots: false, centerMode: false } },
+      { breakpoint: 480,  settings: { slidesToShow: 1, slidesToScroll: 1, arrows: false, dots: false, centerMode: false, centerPadding: "12px" } }
     ]
   };
 
@@ -84,6 +86,10 @@ const ProductoDestacado = () => {
     };
 
     fetchProducts();
+    const onResize = () => setIsMobileView(window.innerWidth <= 640);
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, []);
 
   if (loading) {
@@ -147,16 +153,30 @@ const ProductoDestacado = () => {
           </>
         )}
 
-        {/* overflow-hidden para que centerMode no desborde */}
-        <div className="overflow-hidden">
-          <Slider ref={sliderRef} {...settings}>
-            {products.map((item) => (
-              <div key={item.idproducto} className="px-2">
-                <ProductCard item={item} />
-              </div>
-            ))}
-          </Slider>
-        </div>
+        {/* En móviles renderizamos una lista horizontal simple para evitar problemas del carousel */}
+        {isMobileView ? (
+          <div className="overflow-x-auto -mx-2 px-2">
+            <div className="flex gap-3">
+              {products.map((item) => (
+                <div key={item.idproducto} className="min-w-full shrink-0 px-2">
+                  <div className="mx-auto max-w-md">
+                    <ProductCard item={item} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="overflow-hidden">
+            <Slider ref={sliderRef} {...settings}>
+              {products.map((item) => (
+                <div key={item.idproducto} className="px-2 min-w-full sm:min-w-[200px]">
+                  <ProductCard item={item} />
+                </div>
+              ))}
+            </Slider>
+          </div>
+        )}
       </div>
     </Container>
   );

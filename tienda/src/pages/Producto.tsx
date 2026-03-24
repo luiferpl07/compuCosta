@@ -103,6 +103,11 @@ const Producto = () => {
     return params.get("stock") === "1" || params.get("stock") === "true";
   });
   const [currentPage, setCurrentPage] = useState(() => savedProductsViewState?.page || 1);
+  const [includeOutOfStock, setIncludeOutOfStock] = useState(() => {
+    if (!savedProductsViewState?.search) return false;
+    const params = new URLSearchParams(savedProductsViewState.search);
+    return params.get('includeOut') === '1' || params.get('includeOut') === 'true';
+  });
   const [categorySelected, setCategorySelected] = useState<CategoryProps | null>(null);
   const [categories, setCategories] = useState<CategoryWithSubcategories[]>([]);
 
@@ -167,7 +172,8 @@ const Producto = () => {
       precioMin: urlParams.get('precioMin') ? Number(urlParams.get('precioMin')) : 0,
       precioMax: urlParams.get('precioMax') ? Number(urlParams.get('precioMax')) : MAX_PRICE,
       oferta: urlParams.get('oferta') === '1' || urlParams.get('oferta') === 'true',
-      stock: urlParams.get('stock') === '1' || urlParams.get('stock') === 'true'
+      stock: urlParams.get('stock') === '1' || urlParams.get('stock') === 'true',
+      includeOut: urlParams.get('includeOut') === '1' || urlParams.get('includeOut') === 'true'
     };
   }, [location.search]);
 
@@ -223,7 +229,9 @@ const Producto = () => {
       params.set("page", pageToLoad.toString());
       params.set("limit", ITEMS_PER_PAGE.toString());
       params.set("visibilidad", "visibles");
-      params.set("cantidadMin", "1");
+      if (!includeOutOfStock) {
+        params.set("cantidadMin", "1");
+      }
 
       if (searchQuery.trim()) {
         params.set("search", searchQuery.trim());
@@ -248,6 +256,9 @@ const Producto = () => {
 
       if (stockOnly) {
         params.set("stock", "1");
+      }
+      if (includeOutOfStock) {
+        params.set("includeOut", "1");
       }
 
       const response = await fetch(
@@ -311,9 +322,10 @@ const Producto = () => {
 
         const data = await getData(`${config?.baseUrl}${config?.apiPrefix}/products/${slug}`);
 
-        if (data && (!data.activo || (data.cantidad || 0) <= 0)) {
+        // Allow viewing products that are out of stock, but prevent inactive products
+        if (data && !data.activo) {
           navigate('/productos');
-          toast.error('Este producto no está disponible o está agotado');
+          toast.error('Este producto no está disponible');
           return;
         }
 
@@ -365,12 +377,13 @@ const Producto = () => {
   useEffect(() => {
     if (slug) return;
 
-    const { categoria, busqueda, precioMin, precioMax, oferta, stock } = getUrlParams();
+    const { categoria, busqueda, precioMin, precioMax, oferta, stock, includeOut } = getUrlParams();
     setSelectedCategory(categoria);
     setSearchQuery(busqueda);
     setPriceRange([precioMin, precioMax]);
     setOfferOnly(!!oferta);
     setStockOnly(!!stock);
+    setIncludeOutOfStock(!!includeOut);
   }, [location.search, getUrlParams, slug]);
 
   // ─── Carga de productos paginados con filtros en servidor ────────────────
@@ -763,6 +776,12 @@ const Producto = () => {
                 priceRange={priceRange}
                 onCategoryChange={handleCategoryChange}
                 onPriceRangeChange={handlePriceRangeChange}
+                includeOutOfStock={includeOutOfStock}
+                onIncludeOutOfStockChange={(v: boolean) => {
+                  const params = new URLSearchParams(location.search);
+                  if (v) params.set('includeOut', '1'); else params.delete('includeOut');
+                  navigate(`/productos${params.toString() ? `?${params.toString()}` : ''}`);
+                }}
               />
             </div>
           </div>

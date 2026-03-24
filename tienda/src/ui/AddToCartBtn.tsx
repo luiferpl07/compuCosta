@@ -13,11 +13,13 @@ const AddToCartBtn = ({
   title,
   product,
   showPrice = true,
+  disabled = false,
 }: {
   className?: string;
   title?: string;
   product?: Product;
   showPrice?: boolean;
+  disabled?: boolean;
 }) => {
   const [existingProduct, setExistingProduct] = useState<Product | null>(null);
   const [isAddedToCart, setIsAddedToCart] = useState(false);
@@ -39,6 +41,11 @@ const AddToCartBtn = ({
   }, [product, cartProduct]);
 
   const handleAddToCart = () => {
+    if (disabled) {
+      toast.error('Producto agotado', { icon: '⚠️' });
+      return;
+    }
+
     if (product) {
       addToCart(product);
       toast.success(`${product?.nombreproducto.substring(0, 10)} agregado exitosamente!`, {
@@ -173,12 +180,18 @@ const AddToCartBtn = ({
           </button>
         ) : (
           // Botón "Agregar al carrito" - centrado y con ancho completo
-          <button 
-            onClick={handleAddToCart} 
-            className={twMerge(newClassName, "flex items-center justify-center gap-2 w-full")}
-          >
-            <span>{title || "Agregar al carrito"}</span>
-          </button>
+          (disabled ? (
+            <button disabled className={twMerge(newClassName, "flex items-center justify-center gap-2 w-full bg-gray-200 text-gray-500 cursor-not-allowed")}>
+              <span>Agotado</span>
+            </button>
+          ) : (
+            <button 
+              onClick={handleAddToCart} 
+              className={twMerge(newClassName, "flex items-center justify-center gap-2 w-full")}
+            >
+              <span>{title || "Agregar al carrito"}</span>
+            </button>
+          ))
         )}
       </div>
     </div>
