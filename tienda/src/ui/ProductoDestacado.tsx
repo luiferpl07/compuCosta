@@ -41,17 +41,18 @@ const ProductoDestacado = () => {
         params.set("cantidadMin", "1");
         params.set("destacado", "true");
 
-        const response = await fetch(`${config?.baseUrl}${config?.apiPrefix}/products?${params.toString()}`);
+        const response = await fetch(`${config?.baseUrl}${config?.apiPrefix}/products?${params.toString()}`, { cache: 'no-store' });
         if (!response.ok) {
           throw new Error(`Error HTTP ${response.status}`);
         }
 
         const data = await response.json();
-        let destacados: Product[] = Array.isArray(data?.productos) ? data.productos : [];
+        const all = Array.isArray(data?.productos) ? data.productos : [];
+        let destacados = all.filter((p: Product) => p.destacado === true);
 
-        if (!destacados.length || destacados.length < 8) {
+        if (destacados.length < 8) {
           const collected: Product[] = destacados.slice();
-          let page = 1;
+          let page = 2;
           let hasMore = true;
 
           while (hasMore && collected.length < 8 && page <= 10) {
@@ -60,8 +61,9 @@ const ProductoDestacado = () => {
             fbParams.set("limit", "50");
             fbParams.set("visibilidad", "visibles");
             fbParams.set("cantidadMin", "1");
+            fbParams.set("destacado", "true");
 
-            const resp = await fetch(`${config?.baseUrl}${config?.apiPrefix}/products?${fbParams.toString()}`);
+            const resp = await fetch(`${config?.baseUrl}${config?.apiPrefix}/products?${fbParams.toString()}`, { cache: 'no-store' });
             if (!resp.ok) break;
 
             const pageData = await resp.json();
