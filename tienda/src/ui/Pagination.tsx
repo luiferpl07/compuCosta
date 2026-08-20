@@ -2,7 +2,6 @@ import { useEffect, useState, RefObject } from "react";
 import { config } from "../../config";
 import { Product } from "../../type";
 import ProductCard from "./ProductCard";
-import { getData } from "../lib";
 import { FaSpinner } from "react-icons/fa";
 import { IoChevronBack, IoChevronForward } from "react-icons/io5";
 
@@ -16,14 +15,9 @@ const Pagination = ({ scrollTargetRef }: PaginationProps) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalProducts, setTotalProducts] = useState(0);
 
-  const totalPages = Math.ceil(products.length / ITEMS_PER_PAGE);
-
-  const getCurrentPageProducts = () => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    return products.slice(startIndex, endIndex);
-  };
+  const totalPages = Math.max(1, Math.ceil(totalProducts / ITEMS_PER_PAGE));
 
   const getPageNumbers = () => {
     const pageNumbers = [];
@@ -64,54 +58,33 @@ const Pagination = ({ scrollTargetRef }: PaginationProps) => {
     const fetchProducts = async () => {
       try {
         setLoading(true);
+        const params = new URLSearchParams();
+        params.set("page", currentPage.toString());
+        params.set("limit", ITEMS_PER_PAGE.toString());
+        params.set("visibilidad", "visibles");
+        params.set("cantidadMin", "1");
 
-        // Fetch paginated until we have all active products
-        let allProductsData: Product[] = [];
-        let cursor: number | null = null;
-          
-        do {
-          const url = `${config?.baseUrl}${config?.apiPrefix}/products?limit=100${cursor ? `&cursor=${cursor}` : ""}`;
-          const res = await getData(url);
-          const page: Product[] = res?.productos || [];
-          allProductsData = [...allProductsData, ...page];
-          cursor = res?.nextCursor ?? null;
-        } while (cursor !== null);
-        
-        const productosActivos = allProductsData.filter((product: Product) => {
-          const tieneStock = (product.cantidad || 0) > 0;
-          const estaActivo = product.activo === true;
-          return estaActivo && tieneStock;
-        });
-        
-        console.log('✅ Pagination productos CON stock:', productosActivos.length);
-        
-        // Formatear los productos (las reviews no se traen todas de golpe por rendimiento)
-        const enhancedProducts = productosActivos.map((product: Product) => {
-          return {
-            ...product,
-            enStock: true,
-            reseñasCount: product.reseñasCount || 0,
-            puntuacionPromedio: product.puntuacionPromedio || 0,
-            marca: product.marca || "Sin marca",
-            categorias: product.categorias || "Sin categoría",
-            imagenes: product.imagenes || [{ url: `/images/products/${product.slug}.jpg` }]
-          };
-        });
-        
-        const sortedProducts = enhancedProducts.sort((a: Product, b: Product) => 
-          (b.puntuacionPromedio || 0) - (a.puntuacionPromedio || 0)
-        );
-        
-        setProducts(sortedProducts);
+        const response = await fetch(`${config?.baseUrl}${config?.apiPrefix}/products?${params.toString()}`);
+        if (!response.ok) {
+          throw new Error(`Error HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        const pageProducts: Product[] = Array.isArray(data?.productos) ? data.productos : [];
+
+        setProducts(pageProducts);
+        setTotalProducts(Number(data?.total || 0));
       } catch (error) {
         console.error("❌ Pagination error al cargar productos:", error);
+        setProducts([]);
+        setTotalProducts(0);
       } finally {
         setLoading(false);
       }
     };
 
     fetchProducts();
-  }, []);
+  }, [currentPage]);
 
   useEffect(() => {
     if (currentPage > 1 && scrollTargetRef?.current) {
@@ -140,7 +113,7 @@ const Pagination = ({ scrollTargetRef }: PaginationProps) => {
   return (
     <div>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 mb-10">
-        {getCurrentPageProducts().map((item: Product) => (
+        {products.map((item: Product) => (
           <ProductCard key={item?.idproducto} item={item} />
         ))}
       </div>
@@ -185,7 +158,7 @@ const Pagination = ({ scrollTargetRef }: PaginationProps) => {
       )}
 
       <div className="text-center text-sm text-gray-600 mt-4">
-        Mostrando {(currentPage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, products.length)} de {products.length} productos
+        Mostrando {products.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0} - {Math.min(currentPage * ITEMS_PER_PAGE, totalProducts)} de {totalProducts} productos
       </div>
     </div>
   );

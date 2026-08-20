@@ -52,6 +52,7 @@ const CategoryFilters = ({ id }: { id: string | undefined }) => {
                     ? "text-textoRojo decoration-text-textoRojo"
                     : "text-textoNegro"
                 }`}
+                title={item?.nombre}
               >
                 {item?.nombre}
               </Link>

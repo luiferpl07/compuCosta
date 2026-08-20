@@ -168,6 +168,10 @@ export const store = create<StoreType>()(
     {
       name: "computadoresDeLaCosta-storage",
       storage: customStorage,
+      partialize: (state) => ({
+        cartProduct: state.cartProduct,
+        favoriteProduct: state.favoriteProduct,
+      }),
     }
   )
 );

@@ -13,6 +13,7 @@ const ProductoDestacado = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const sliderRef = useRef<Slider>(null);
+  const [isMobileView, setIsMobileView] = useState<boolean>(false);
 
   const settings = {
     dots: products.length > 4,
@@ -21,28 +22,64 @@ const ProductoDestacado = () => {
     slidesToShow: 4,
     slidesToScroll: 1,
     autoplay: false,
+    arrows: false,
     responsive: [
-      { breakpoint: 1024, settings: { slidesToShow: 3, slidesToScroll: 1 } },
-      { breakpoint: 768,  settings: { slidesToShow: 2, slidesToScroll: 1 } },
-      { breakpoint: 480,  settings: { slidesToShow: 1, slidesToScroll: 1 } }
+      { breakpoint: 1024, settings: { slidesToShow: 3, slidesToScroll: 1, arrows: false } },
+      { breakpoint: 768,  settings: { slidesToShow: 2, slidesToScroll: 1, arrows: false } },
+      { breakpoint: 640,  settings: { slidesToShow: 1, slidesToScroll: 1, arrows: false, dots: false, centerMode: false } },
+      { breakpoint: 480,  settings: { slidesToShow: 1, slidesToScroll: 1, arrows: false, dots: false, centerMode: false, centerPadding: "12px" } }
     ]
   };
 
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await fetch(`${config?.baseUrl}${config?.apiPrefix}/products?limit=100`);
+        const params = new URLSearchParams();
+        params.set("page", "1");
+        params.set("limit", "8");
+        params.set("visibilidad", "visibles");
+        params.set("cantidadMin", "1");
+        params.set("destacado", "true");
+
+        const response = await fetch(`${config?.baseUrl}${config?.apiPrefix}/products?${params.toString()}`, { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`Error HTTP ${response.status}`);
+        }
+
         const data = await response.json();
+        const all = Array.isArray(data?.productos) ? data.productos : [];
+        let destacados = all.filter((p: Product) => p.destacado === true);
 
-        // ✅ La API devuelve { productos: [...], total, ... }
-        const allProducts: Product[] = data?.productos || [];
+        if (destacados.length < 8) {
+          const collected: Product[] = destacados.slice();
+          let page = 2;
+          let hasMore = true;
 
-        const destacados = allProducts
-          .filter((p) => p.destacado === true && p.activo === true && (p.cantidad || 0) > 0)
-          .slice(0, 8);
+          while (hasMore && collected.length < 8 && page <= 10) {
+            const fbParams = new URLSearchParams();
+            fbParams.set("page", page.toString());
+            fbParams.set("limit", "50");
+            fbParams.set("visibilidad", "visibles");
+            fbParams.set("cantidadMin", "1");
+            fbParams.set("destacado", "true");
 
-        console.log('✅ Productos destacados:', destacados.length);
-        setProducts(destacados);
+            const resp = await fetch(`${config?.baseUrl}${config?.apiPrefix}/products?${fbParams.toString()}`, { cache: 'no-store' });
+            if (!resp.ok) break;
+
+            const pageData = await resp.json();
+            const pageProducts: Product[] = Array.isArray(pageData?.productos) ? pageData.productos : [];
+            const featuredInPage = pageProducts.filter((p) => p.destacado === true);
+            collected.push(...featuredInPage);
+
+            hasMore = Boolean(pageData?.hasMore);
+            page += 1;
+          }
+
+          destacados = collected;
+        }
+
+        console.log('Productos destacados:', destacados.length);
+        setProducts(destacados.slice(0, 8));
       } catch (error) {
         console.error('❌ Error fetching featured products:', error);
       } finally {
@@ -51,6 +88,10 @@ const ProductoDestacado = () => {
     };
 
     fetchProducts();
+    const onResize = () => setIsMobileView(window.innerWidth <= 640);
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, []);
 
   if (loading) {
@@ -96,32 +137,48 @@ const ProductoDestacado = () => {
       </div>
 
       <div className="relative mb-12">
+        {/*  Flechas solo en desktop */}
         {products.length > 4 && (
           <>
             <button
               onClick={() => sliderRef.current?.slickPrev()}
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white rounded-full shadow-lg p-2 -ml-4 opacity-80 hover:opacity-100 transition-opacity"
+              className="hidden md:block absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white rounded-full shadow-lg p-2 -ml-4 opacity-80 hover:opacity-100 transition-opacity"
             >
               <FaChevronLeft className="text-gray-600" />
             </button>
             <button
               onClick={() => sliderRef.current?.slickNext()}
-              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white rounded-full shadow-lg p-2 -mr-4 opacity-80 hover:opacity-100 transition-opacity"
+              className="hidden md:block absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white rounded-full shadow-lg p-2 -mr-4 opacity-80 hover:opacity-100 transition-opacity"
             >
               <FaChevronRight className="text-gray-600" />
             </button>
           </>
         )}
 
-        <div className="px-6">
-          <Slider ref={sliderRef} {...settings}>
-            {products.map((item) => (
-              <div key={item.idproducto} className="px-2">
-                <ProductCard item={item} />
-              </div>
-            ))}
-          </Slider>
-        </div>
+        {/* En móviles renderizamos una lista horizontal simple para evitar problemas del carousel */}
+        {isMobileView ? (
+          <div className="overflow-x-auto -mx-2 px-2">
+            <div className="flex gap-3">
+              {products.map((item) => (
+                <div key={item.idproducto} className="min-w-full shrink-0 px-2">
+                  <div className="mx-auto max-w-md">
+                    <ProductCard item={item} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="overflow-hidden">
+            <Slider ref={sliderRef} {...settings}>
+              {products.map((item) => (
+                <div key={item.idproducto} className="px-2 min-w-full sm:min-w-[200px]">
+                  <ProductCard item={item} />
+                </div>
+              ))}
+            </Slider>
+          </div>
+        )}
       </div>
     </Container>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useState, useDeferredValue, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { logo } from "../assets";
 import { IoClose, IoMenu, IoGridOutline } from "react-icons/io5";
 import { FiShoppingCart, FiStar, FiUser } from "react-icons/fi";
@@ -12,6 +12,7 @@ import { getData } from "../lib";
 import { CategoryProps, Product } from "../../type";
 import ProductCard from "./ProductCard";
 import { store } from "../lib/store";
+import { useAuth } from "../context/AuthContext";
 
 const bottomNavigation = [
   { title: "INICIO", link: "/", icon: <HiOutlineSparkles className="w-4 h-4" /> },
@@ -30,6 +31,7 @@ interface CategoryWithSubcategories extends CategoryProps {
 
 const Header = () => {
   const [searchText, setSearchText] = useState("");
+  const [includeOutOfStock, setIncludeOutOfStock] = useState(false);
   const [categories, setCategories] = useState<CategoryWithSubcategories[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -41,14 +43,15 @@ const Header = () => {
   const [showMobileCategories, setShowMobileCategories] = useState(false);
   const [activeCategory, setActiveCategory] = useState<number | null>(null);
 
-  const deferredSearch = useDeferredValue(searchText);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  // Ref para guardar caché de todos los productos y evitar re-fetches
-  const cachedProductsRef = useRef<Product[] | null>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
 
   const navigate = useNavigate();
+  const { currentUser: authCurrentUser } = useAuth();
   const { cartProduct, favoriteProduct, currentUser } = store();
+  const sessionUser = authCurrentUser || currentUser;
+  const userDisplayName = `${sessionUser?.firstName || ""} ${sessionUser?.lastName || ""}`.trim();
 
   // ─── Organizar categorías desde API ──────────────────────────────────────
   const organizeCategoriesFromAPI = (categoryData: CategoryProps[]): CategoryWithSubcategories[] => {
@@ -99,26 +102,16 @@ const Header = () => {
     return () => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
       if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+      if (searchAbortRef.current) {
+        searchAbortRef.current.abort();
+        searchAbortRef.current = null;
+      }
     };
   }, []);
 
-  // ─── Puntuación de relevancia ─────────────────────────────────────────────
-  const scoreProduct = (product: Product, terms: string[]): number => {
-    const nombre = product.nombreproducto.toLowerCase();
-    let score = 0;
-    terms.forEach(term => {
-      if (nombre === term) score += 100;
-      else if (nombre.startsWith(term)) score += 60;
-      else if (nombre.includes(` ${term}`)) score += 40;
-      else if (nombre.includes(term)) score += 20;
-      if (product.descripcion?.toLowerCase().includes(term)) score += 5;
-    });
-    return score;
-  };
-
-  // ─── Búsqueda Perezosa (Lazy Loading & Debounce Único) ───────────────────
+  // ─── Búsqueda server-side con debounce y abort ────────────────────────────
   useEffect(() => {
-    const query = deferredSearch.toLowerCase().trim();
+    const query = searchText.toLowerCase().trim();
     
     // Auto-limpiar búsqueda caracteres extraños básicos
     const sanitizedQuery = query.replace(/[<>{}\\]/g, "");
@@ -134,60 +127,118 @@ const Header = () => {
 
     searchTimeoutRef.current = setTimeout(async () => {
       try {
-        let activeProducts = cachedProductsRef.current;
-        
-        // Cargar productos SOLO si no están cacheados
-        if (!activeProducts) {
-          let allProductsData: Product[] = [];
-          let cursor: number | null = null;
-          
-          do {
-            const url = `${config?.baseUrl}${config?.apiPrefix}/products?limit=100${cursor ? `&cursor=${cursor}` : ""}`;
-            const res = await getData(url);
-            const page = res?.productos || [];
-            allProductsData = [...allProductsData, ...page];
-            cursor = res?.nextCursor ?? null;
-          } while (cursor !== null);
-          
-          activeProducts = allProductsData.filter(
-            (p) => p.activo === true && (p.cantidad || 0) > 0
-          );
-          cachedProductsRef.current = activeProducts; // Guardar cache en memoria
+        if (searchAbortRef.current) {
+          searchAbortRef.current.abort();
         }
+
+        const controller = new AbortController();
+        searchAbortRef.current = controller;
 
         const terms = sanitizedQuery.split(/\s+/).filter(t => t.length >= 2);
         if (terms.length === 0) {
           setFilteredProducts([]);
+          setIsSearching(false);
           return;
         }
 
-        // Búsqueda simple: todos los términos deben coincidir con nombre o descripción (AND y Scoring)
-        const candidates = activeProducts
-          .filter(p => {
-             const nombre = p.nombreproducto.toLowerCase();
-             const desc = (p.descripcion || "").toLowerCase();
-             return terms.every(term => nombre.includes(term) || desc.includes(term));
-          })
-          .sort((a, b) => {
-             const scoreA = scoreProduct(a, terms);
-             const scoreB = scoreProduct(b, terms);
-             if (scoreB !== scoreA) return scoreB - scoreA;
-             return (b.puntuacionPromedio || 0) - (a.puntuacionPromedio || 0);
-          })
-          .slice(0, 10);
+        const params = new URLSearchParams();
+        params.set("page", "1");
+        params.set("limit", "10");
+        params.set("search", sanitizedQuery);
+        params.set("visibilidad", "visibles");
+        if (!includeOutOfStock) params.set("cantidadMin", "1");
+        if (includeOutOfStock) params.set("includeOut", "1");
+
+        const response = await fetch(
+          `${config?.baseUrl}${config?.apiPrefix}/products?${params.toString()}`,
+          {
+            signal: controller.signal,
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`Error HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (searchAbortRef.current !== controller) return;
+
+        const candidates: Product[] = Array.isArray(data?.productos)
+          ? data.productos.slice(0, 10)
+          : [];
 
         setFilteredProducts(candidates);
       } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
         setFilteredProducts([]);
       } finally {
         setIsSearching(false);
       }
-    }, 300); // Un solo delay de debounce
+    }, 400);
 
     return () => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+      if (searchAbortRef.current) {
+        searchAbortRef.current.abort();
+      }
     };
-  }, [deferredSearch]);
+  }, [searchText, includeOutOfStock]);
+
+  // Trigger an immediate search (used when toggling includeOutOfStock)
+  const triggerSearchNow = async (includeFlag?: boolean) => {
+    const query = searchText.toLowerCase().trim();
+    const sanitizedQuery = query.replace(/[<>{}\\]/g, "");
+
+    if (!sanitizedQuery) {
+      setFilteredProducts([]);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    if (searchAbortRef.current) {
+      searchAbortRef.current.abort();
+    }
+
+    try {
+      const controller = new AbortController();
+      searchAbortRef.current = controller;
+
+      const terms = sanitizedQuery.split(/\s+/).filter(t => t.length >= 2);
+      if (terms.length === 0) {
+        setFilteredProducts([]);
+        setIsSearching(false);
+        return;
+      }
+
+      const params = new URLSearchParams();
+      params.set("page", "1");
+      params.set("limit", "10");
+      params.set("search", sanitizedQuery);
+      params.set("visibilidad", "visibles");
+      if (!((typeof includeFlag === 'undefined') ? includeOutOfStock : includeFlag)) params.set("cantidadMin", "1");
+      if ((typeof includeFlag !== 'undefined' ? includeFlag : includeOutOfStock)) params.set("includeOut", "1");
+
+      const response = await fetch(
+        `${config?.baseUrl}${config?.apiPrefix}/products?${params.toString()}`,
+        { signal: controller.signal }
+      );
+
+      if (!response.ok) throw new Error(`Error HTTP ${response.status}`);
+
+      const data = await response.json();
+      const candidates: Product[] = Array.isArray(data?.productos) ? data.productos.slice(0, 10) : [];
+      setFilteredProducts(candidates);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setFilteredProducts([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
 
   // ─── Handlers de hover para mega menú ────────────────────────────────────
   const handleMouseEnter = () => {
@@ -235,14 +286,17 @@ const Header = () => {
   // ─── Eventos globales ─────────────────────────────────────────────────────
   useEffect(() => {
     const handleScroll = () => {
-      if (mobileMenuOpen || mobileSearchOpen) {
+      // Close only the mobile menu on scroll. Do NOT auto-close the mobile search here,
+      // because focusing the search input or the virtual keyboard can trigger viewport
+      // scroll events on mobile and would immediately close the search (causing a
+      // flicker). This preserves the search UX on small screens.
+      if (mobileMenuOpen) {
         setMobileMenuOpen(false);
-        setMobileSearchOpen(false);
       }
     };
-    window.addEventListener("scroll", handleScroll);
+    window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
-  }, [mobileMenuOpen, mobileSearchOpen]);
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -288,9 +342,10 @@ const Header = () => {
   const hasActiveCategories = categories.length > 0;
 
   return (
-    <div className="w-full bg-gradient-to-r from-white to-gray-50 sticky top-0 z-50 shadow-sm border-b border-gray-100">
-      {/* ── Barra superior ───────────────────────────────────────────────── */}
-      <div className="max-w-screen-xl mx-auto min-h-[4.5rem] sm:min-h-[5.5rem] flex items-center justify-between px-4 sm:px-6 lg:px-8 py-2">
+    <>
+    <div role="navigation" aria-label="Main navigation" className="site-header w-full bg-gradient-to-r from-white to-gray-50 fixed top-0 left-0 right-0 z-50 shadow-sm border-b border-gray-100">
+      {/* ── Barra superior (altura fija por breakpoint) ────────────────────── */}
+      <div className="max-w-screen-xl mx-auto h-[48px] sm:h-[56px] lg:h-[72px] flex items-center justify-between px-4 sm:px-6 lg:px-8 overflow-x-hidden">
         {/* Botón menú móvil */}
         <button
           className="lg:hidden group relative text-2xl sm:text-3xl mr-2 sm:mr-3 flex items-center justify-center
@@ -302,20 +357,20 @@ const Header = () => {
         </button>
 
         {/* Logo */}
-        <Link to={"/"} className="flex-shrink-0 group">
+        <Link to={"/"} className="flex-shrink-0 flex items-center group h-full">
           <img
             src={logo}
             alt="Logo"
-            className="w-24 h-auto sm:w-28 md:w-32 lg:w-48 max-h-14 sm:max-h-16 object-contain
+            className="w-auto h-full max-h-[40px] sm:max-h-[48px] lg:max-h-[64px] object-contain
               group-hover:scale-105 transition-transform duration-300 filter drop-shadow-sm"
           />
         </Link>
 
         {/* Barra de búsqueda (desktop) */}
-        <div className="hidden lg:flex max-w-md xl:max-w-2xl w-full mx-6 relative search-container">
+        <div role="search" aria-label="Buscar productos" className="hidden lg:flex max-w-md xl:max-w-2xl w-full mx-6 relative search-container">
           <div
             className={`flex items-center w-full relative rounded-2xl bg-white
-              border-2 transition-all duration-300 px-4 xl:px-5 py-3 shadow-sm hover:shadow-md
+              border-2 transition-all duration-300 px-3 xl:px-4 py-1 shadow-sm hover:shadow-md max-h-[56px] sm:max-h-[52px] lg:max-h-[48px]
               ${searchFocused || searchText
                 ? "border-textoRojo shadow-lg ring-4 ring-red-50"
                 : "border-gray-200 hover:border-gray-300"
@@ -326,14 +381,39 @@ const Header = () => {
                 ${searchFocused || searchText ? "text-textoRojo scale-110" : "text-gray-400"}`}
             />
             <input
+              aria-label="Buscar productos"
               type="text"
               onChange={e => setSearchText(e.target.value)}
               value={searchText}
               onFocus={() => setSearchFocused(true)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const params = new URLSearchParams();
+                  if (searchText.trim()) params.set('busqueda', searchText.trim());
+                  if (includeOutOfStock) params.set('includeOut', '1');
+                  navigate(`/productos${params.toString() ? `?${params.toString()}` : ''}`);
+                }
+              }}
               placeholder={isIndexReady ? "¿Qué estás buscando hoy?" : "Cargando productos..."}
               className="w-full bg-transparent text-gray-800 text-sm xl:text-base outline-none
-                placeholder:text-gray-400 placeholder:font-normal font-medium"
+                placeholder:text-gray-400 placeholder:font-normal font-medium py-2"
             />
+            <div className="hidden lg:flex items-center ml-3 gap-2">
+              <label className="inline-flex items-center text-xs text-gray-500">
+                <input
+                  type="checkbox"
+                  checked={includeOutOfStock}
+                  onChange={(e) => {
+                    const newVal = e.target.checked;
+                    setIncludeOutOfStock(newVal);
+                    triggerSearchNow(newVal);
+                  }}
+                  className="h-4 w-4 mr-1"
+                />
+                Incluir agotados
+              </label>
+            </div>
             {searchText && (
               <button
                 onClick={clearSearch}
@@ -359,36 +439,52 @@ const Header = () => {
         </button>
 
         {/* Iconos usuario / favoritos / carrito */}
-        <div className="flex items-center gap-x-3 sm:gap-x-4 md:gap-x-5 lg:gap-x-6 text-xl sm:text-2xl md:text-2xl">
-          <Link to={"/perfil"} className="group relative hover:text-textoRojo transition-all duration-300 p-2 rounded-xl hover:bg-red-50">
-            {currentUser ? (
-              <img
-                src={currentUser?.avatar}
-                alt="profileImg"
-                className="w-7 h-7 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-full object-cover
-                  ring-2 ring-transparent group-hover:ring-textoRojo group-hover:scale-110
-                  transition-all duration-300 shadow-sm"
-              />
-            ) : (
-              <FiUser className="group-hover:scale-110 transition-transform duration-200" />
-            )}
+        <div className="flex items-center gap-x-1.5 sm:gap-x-3 md:gap-x-4 lg:gap-x-5 text-lg sm:text-xl md:text-2xl pr-2 sm:pr-4">
+          {sessionUser && (
+            <Link
+              to={"/perfil"}
+              className="hidden sm:inline-flex items-center rounded-full border border-red-100 bg-red-50 px-2 py-1 text-[10px] sm:text-xs font-semibold text-textoRojo hover:bg-red-100 transition-colors duration-200 whitespace-nowrap overflow-hidden max-w-[100px] sm:max-w-[150px]"
+              title={userDisplayName || "Mi perfil"}
+            >
+              <span className="truncate">Hola, {sessionUser.firstName || "Usuario"}</span>
+            </Link>
+          )}
+
+          {/* Avatar compacto para móviles (xs) */}
+          {sessionUser && (
+            <Link
+              to={"/perfil"}
+              title={userDisplayName || "Mi perfil"}
+              aria-label={userDisplayName || "Mi perfil"}
+              className="inline-flex sm:hidden items-center justify-center w-8 h-8 rounded-full bg-red-50 text-textoRojo font-semibold text-sm hover:bg-red-100 transition-colors duration-200 flex-shrink-0"
+            >
+              <span>{(sessionUser?.firstName || 'U').charAt(0).toUpperCase()}</span>
+            </Link>
+          )}
+
+          <Link
+            to={"/perfil"}
+            title={userDisplayName || "Mi perfil"}
+            className="hidden sm:inline-flex group relative hover:text-textoRojo transition-all duration-300 p-1.5 sm:p-2 rounded-xl hover:bg-red-50 flex-shrink-0"
+          >
+            <FiUser className="w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 text-gray-800 group-hover:text-textoRojo transition-all duration-200" />
           </Link>
 
-          <Link to={"/favorito"} className="group relative hover:text-textoRojo transition-all duration-300 p-2 rounded-xl hover:bg-red-50">
+          <Link to={"/favorito"} className="group relative hover:text-textoRojo transition-all duration-300 p-1.5 sm:p-2 rounded-xl hover:bg-red-50 flex-shrink-0">
             <FiStar className="group-hover:scale-110 transition-transform duration-200" />
             <span className="inline-flex items-center justify-center bg-gradient-to-r from-textoAmarillo to-yellow-400
-              text-white absolute -top-1 -right-1 text-[9px] sm:text-[10px]
-              rounded-full w-4 h-4 sm:w-5 sm:h-5 font-bold shadow-sm ring-2 ring-white
+              text-white absolute -top-0.5 -right-0.5 text-[8px] sm:text-[9px]
+              rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold shadow-sm ring-1 ring-white
               group-hover:scale-110 transition-transform duration-200">
               {favoriteProduct?.length > 0 ? favoriteProduct.length : "0"}
             </span>
           </Link>
 
-          <Link to={"/carrito"} className="group relative hover:text-textoRojo transition-all duration-300 p-2 rounded-xl hover:bg-red-50">
+          <Link to={"/carrito"} className="group relative hover:text-textoRojo transition-all duration-300 p-1.5 sm:p-2 rounded-xl hover:bg-red-50 flex-shrink-0">
             <FiShoppingCart className="group-hover:scale-110 transition-transform duration-200" />
             <span className="inline-flex items-center justify-center bg-gradient-to-r from-textoRojo to-red-600
-              text-white absolute -top-1 -right-1 text-[9px] sm:text-[10px]
-              rounded-full w-4 h-4 sm:w-5 sm:h-5 font-bold shadow-sm ring-2 ring-white
+              text-white absolute -top-0.5 -right-0.5 text-[8px] sm:text-[9px]
+              rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold shadow-sm ring-1 ring-white
               group-hover:scale-110 transition-transform duration-200">
               {cartProduct?.length > 0 ? cartProduct.length : "0"}
             </span>
@@ -398,29 +494,55 @@ const Header = () => {
 
       {/* ── Barra de búsqueda móvil ───────────────────────────────────────── */}
       {mobileSearchOpen && (
-        <div className="lg:hidden w-full px-4 sm:px-6 pb-4 search-container">
-          <div className="flex items-center relative rounded-2xl bg-white
-            border-2 border-textoRojo shadow-lg px-4 py-3 ring-4 ring-red-50">
+        <div role="search" aria-label="Buscar productos" className="lg:hidden w-full px-4 sm:px-6 pb-4 search-container">
+          <div className="flex items-center relative rounded-2xl bg-white border-2 border-textoRojo shadow-lg px-4 py-3 ring-4 ring-red-50">
             <BiSearchAlt2 className="text-xl sm:text-2xl mr-3 text-textoRojo" />
             <input
+              aria-label="Buscar productos"
               type="text"
               onChange={e => setSearchText(e.target.value)}
               value={searchText}
               placeholder={isIndexReady ? "¿Qué estás buscando hoy?" : "Cargando productos..."}
-              className="w-full bg-transparent text-gray-800 text-sm sm:text-base outline-none
-                placeholder:text-gray-400 placeholder:font-normal font-medium"
+              className="w-full bg-transparent text-gray-800 text-sm sm:text-base outline-none placeholder:text-gray-400 placeholder:font-normal font-medium"
               autoFocus
             />
             {searchText && (
               <button
                 onClick={clearSearch}
-                className="flex items-center justify-center p-1.5 rounded-full
-                  hover:bg-red-50 transition-colors duration-200"
+                className="flex items-center justify-center p-1.5 rounded-full hover:bg-red-50 transition-colors duration-200"
                 aria-label="Limpiar búsqueda"
               >
                 <IoClose className="text-xl sm:text-2xl text-gray-500 hover:text-textoRojo" />
               </button>
             )}
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <label className="inline-flex items-center text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={includeOutOfStock}
+                onChange={(e) => {
+                  const newVal = e.target.checked;
+                  setIncludeOutOfStock(newVal);
+                  triggerSearchNow(newVal);
+                }}
+                className="h-4 w-4 mr-2"
+              />
+              Incluir agotados
+            </label>
+            <button
+              onClick={() => {
+                const params = new URLSearchParams();
+                if (searchText.trim()) params.set('busqueda', searchText.trim());
+                if (includeOutOfStock) params.set('includeOut', '1');
+                navigate(`/productos${params.toString() ? `?${params.toString()}` : ''}`);
+                clearSearch();
+                setMobileSearchOpen(false);
+              }}
+              className="px-4 py-2 bg-textoRojo text-white rounded-lg font-semibold"
+            >
+              Buscar
+            </button>
           </div>
         </div>
       )}
@@ -432,13 +554,9 @@ const Header = () => {
           text-black shadow-2xl border-t border-gray-200 backdrop-blur-sm search-results">
 
           {isSearching ? (
-            <div className="py-8 sm:py-12 w-full flex flex-col items-center justify-center">
-              <div className="relative">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 border-4 border-gray-200 rounded-full
-                  border-t-textoRojo animate-spin mb-4"></div>
-              </div>
-              <p className="text-lg sm:text-xl text-gray-600 font-medium">Buscando productos...</p>
-              <p className="text-sm text-gray-400 mt-1">Encontrando las mejores opciones para ti</p>
+            <div className="py-6 sm:py-8 w-full flex flex-col items-center justify-center">
+              <div className="w-8 h-8 border-2 border-gray-200 rounded-full border-t-textoRojo animate-spin mb-3"></div>
+              <p className="text-sm sm:text-base text-gray-600 font-medium">Buscando productos...</p>
             </div>
           ) : filteredProducts.length > 0 ? (
             <>
@@ -471,21 +589,21 @@ const Header = () => {
                 ))}
               </div>
 
-              {filteredProducts.length === 10 && (
-                <div className="mt-6 text-center">
-                  <Link
-                    to={`/productos?busqueda=${encodeURIComponent(searchText)}`}
-                    onClick={clearSearch}
-                    className="inline-flex items-center gap-2 py-3 px-6 bg-gradient-to-r from-textoRojo to-red-600
-                      text-white rounded-xl hover:from-red-600 hover:to-red-700
-                      transition-all duration-300 font-semibold shadow-lg hover:shadow-xl
-                      hover:scale-105 transform"
-                  >
-                    <FaChevronRight className="w-4 h-4" />
-                    Ver más resultados
-                  </Link>
-                </div>
-              )}
+                  {filteredProducts.length === 10 && (
+                    <div className="mt-6 text-center">
+                      <Link
+                        to={`/productos?busqueda=${encodeURIComponent(searchText)}${includeOutOfStock ? `&includeOut=1` : ``}`}
+                        onClick={clearSearch}
+                        className="inline-flex items-center gap-2 py-3 px-6 bg-gradient-to-r from-textoRojo to-red-600
+                          text-white rounded-xl hover:from-red-600 hover:to-red-700
+                          transition-all duration-300 font-semibold shadow-lg hover:shadow-xl
+                          hover:scale-105 transform"
+                      >
+                        <FaChevronRight className="w-4 h-4" />
+                        Ver más resultados
+                      </Link>
+                    </div>
+                  )}
             </>
           ) : (
             <div className="py-8 sm:py-12 bg-gradient-to-br from-gray-50 to-red-50 w-full flex flex-col
@@ -512,7 +630,8 @@ const Header = () => {
 
       {/* ── Barra de navegación ───────────────────────────────────────────── */}
       <div className="w-full bg-gradient-to-r from-textoRojo via-red-600 to-textoRojo text-white shadow-lg">
-        <Container className="py-3 max-w-5xl flex items-center gap-3 sm:gap-4 md:gap-6 justify-between">
+      {/* Barra roja (altura fija por breakpoint) */}
+      <Container className="h-[36px] md:h-[40px] lg:h-[48px] flex items-center max-w-5xl gap-2 sm:gap-3 md:gap-4 justify-between px-4">
 
           {hasActiveCategories && (
             <div
@@ -521,7 +640,7 @@ const Header = () => {
               onMouseLeave={handleMouseLeave}
             >
               <div className="inline-flex items-center gap-2 sm:gap-3 rounded-xl bg-white/10 backdrop-blur-sm
-                hover:bg-white/20 py-2 sm:py-2.5 px-3 sm:px-4 text-sm sm:text-base lg:text-lg
+                hover:bg-white/20 py-1 sm:py-1 px-3 sm:px-3 text-sm sm:text-base lg:text-base
                 font-bold text-white cursor-pointer transition-all duration-300 border border-white/20
                 hover:border-white/40 hover:shadow-lg group-hover:scale-105">
                 <IoGridOutline className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -644,7 +763,7 @@ const Header = () => {
                 to={link}
                 key={title}
                 className="group relative uppercase text-xs xl:text-sm font-bold text-white/90
-                  hover:text-white transition-all duration-300 py-2 px-3 rounded-lg
+                  hover:text-white transition-all duration-300 py-0.5 px-3 rounded-lg
                   hover:bg-white/10 flex items-center gap-2 whitespace-nowrap"
               >
                 <span className="group-hover:scale-110 transition-transform duration-200">{icon}</span>
@@ -764,6 +883,8 @@ const Header = () => {
         </div>
       )}
     </div>
+    {/* Spacer removed: Layout now applies dynamic padding-top based on header height */}
+    </>
   );
 };
 

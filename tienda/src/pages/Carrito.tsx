@@ -90,7 +90,6 @@ const Carrito = () => {
               {/* Productos */}
               <div className="space-y-6">
                 {cartProduct.map((product) => {
-                  const showDiscount = product?.lista2_activa && product?.lista2 && product.lista2 > product.lista1;
                   const totalPrice = product.lista1 * product.cantidad;
                   const mainImage = getProductImage(product?.imagenes);
                   const fallbackImageAlt = getProductImageAlt(product?.imagenes, product?.nombreproducto);
@@ -100,7 +99,7 @@ const Carrito = () => {
                       
                       {/* Imagen y detalles del producto */}
                       <div className="lg:col-span-5 flex gap-4 items-center">
-                        <Link to={`/productos/${product.idproducto}`}>
+                        <Link to={`/productos/${product.slug || product.idproducto}`}>
                           <img
                             src={mainImage}
                             alt={fallbackImageAlt}
@@ -108,7 +107,7 @@ const Carrito = () => {
                           />
                         </Link>
                         <div className="flex-1">
-                          <Link to={`/productos/${product.idproducto}`}>
+                          <Link to={`/productos/${product.slug || product.idproducto}`}>
                             <h3 className="text-sm font-normal text-gray-900 mb-1 hover:text-red-600 transition-colors">
                               {product.nombreproducto}
                             </h3>

@@ -98,16 +98,18 @@ const Categoria = () => {
             {selectedCategory.replace("-", " ").toUpperCase()}
           </h2>
           
-          <div className="flex items-start gap-10">
+          <div className="flex flex-col lg:flex-row items-start gap-10">
             {/* Filtros */}
-            <Filters 
-              selectedCategory={selectedCategory}
-              onCategoryChange={handleCategoryChange}
-              priceRange={priceRange}
-              onPriceRangeChange={setPriceRange}
-            />
+            <div className="w-full lg:w-72 xl:w-80 flex-shrink-0">
+              <Filters 
+                selectedCategory={selectedCategory}
+                onCategoryChange={handleCategoryChange}
+                priceRange={priceRange}
+                onPriceRangeChange={setPriceRange}
+              />
+            </div>
 
-            <div className="flex-1">
+            <div className="flex-1 w-full min-w-0">
               <div className="flex justify-between mb-4">
                 <select
                   value={sortBy}

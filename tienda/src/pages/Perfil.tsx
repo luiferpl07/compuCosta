@@ -73,6 +73,7 @@ const Perfil = () => {
   };
 
   const classes = getResponsiveClasses();
+  const fullName = `${currentUser?.firstName || ""} ${currentUser?.lastName || ""}`.trim();
   
   // 🚀 LÓGICA DE LOADING ULTRA OPTIMIZADA
   // Solo mostrar loading en casos absolutamente necesarios
@@ -102,10 +103,14 @@ const Perfil = () => {
         <div className={classes.container}>
           <div className="mb-8">
             <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight">
-              {showUserProfile ? 'Mi Perfil' : 'Accede a tu Cuenta'}
+              {showUserProfile ? `Mi Perfil${fullName ? ` - ${fullName}` : ""}` : 'Accede a tu Cuenta'}
             </h1>
             <p className="text-gray-500 mt-2">
-              {showUserProfile ? 'Administra tu información y direcciones.' : 'Inicia sesión para gestionar tus pedidos.'}
+              {showUserProfile
+                ? (currentUser?.email
+                  ? `Administra tu información y direcciones. Correo: ${currentUser.email}`
+                  : 'Administra tu información y direcciones.')
+                : 'Inicia sesión para gestionar tus pedidos.'}
             </p>
           </div>
           

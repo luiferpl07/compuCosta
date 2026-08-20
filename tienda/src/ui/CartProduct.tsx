@@ -99,7 +99,7 @@ const CartProduct = ({ product }: { product: Product }) => {
 
   return (
     <div className="flex py-6 sm:py-10">
-      <Link to={`/productos/${product.idproducto}`}>
+      <Link to={`/productos/${product.slug || product.idproducto}`}>
         <img
           src={mainImage}
           alt={fallbackImageAlt}

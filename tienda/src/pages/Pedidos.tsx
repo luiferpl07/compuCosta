@@ -119,7 +119,7 @@ const Pedidos = () => {
                                 className="flex space-x-6 border-b border-gray-200 py-3"
                               >
                                 <Link
-                                  to={`/productos/${item?.id}`}
+                                  to={`/productos/${item?.slug || item?.id || item?.idproducto}`}
                                   className="h-20 w-20 flex-none sm:h-40 sm:w-40 rounded-lg bg-gray-100 border border-gray-300 hover:border-skyText overflow-hidden"
                                 >
                                   <img
@@ -131,7 +131,7 @@ const Pedidos = () => {
                                 <div className="flex flex-auto flex-col">
                                   <div>
                                     <Link
-                                      to={`/productos/${item?.id}`}
+                                      to={`/productos/${item?.slug || item?.id || item?.idproducto}`}
                                       className="font-medium text-gray-900"
                                     >
                                       {item?.nombre}

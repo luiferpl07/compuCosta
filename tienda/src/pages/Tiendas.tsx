@@ -45,8 +45,8 @@ const Tiendas = () => {
           sucursales.forEach(sucursal => {
             L.marker([sucursal.posicion.lat, sucursal.posicion.lng], {
               icon: L.icon({
-                iconUrl: markerIconPng,  // 🟢 Usa la imagen importada
-                shadowUrl: markerShadowPng, // 🟢 Usa la sombra del icono
+                iconUrl: markerIconPng,  
+                shadowUrl: markerShadowPng, 
                 iconSize: [20, 35],
                 iconAnchor: [10, 38],
                 popupAnchor: [1, -34],

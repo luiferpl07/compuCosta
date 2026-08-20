@@ -60,6 +60,7 @@ export interface ProductReview {
 }
 
 export interface Product {
+  id?: number;
   idproducto: string;
   nombreproducto: string;
   lista1: number;

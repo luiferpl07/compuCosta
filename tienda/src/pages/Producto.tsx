@@ -1,20 +1,18 @@
-import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
-import { useParams, useLocation, useNavigate, Link  } from "react-router-dom";
+import { useEffect, useLayoutEffect, useState, useMemo, useCallback, useRef } from "react";
+import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { config } from "../../config";
 import { Product, CategoryProps } from "../../type";
 import { getData } from "../lib";
 import Loading from "../ui/Loading";
 import Container from "../ui/Container";
-import PriceTag from "../ui/PriceTag";
-import { FaRegEye, FaFilter } from "react-icons/fa";
 import { MdStar, MdStarHalf, MdOutlineStarOutline } from "react-icons/md";
 import { IoChevronBack, IoChevronForward, IoClose } from "react-icons/io5";
 import { HiAdjustments } from "react-icons/hi";
 import FormatoPrecio from "../ui/FormatoPrecio";
 import AddToCartBtn from "../ui/AddToCartBtn";
-import { productPayment } from "../assets";
 import ProductCard from "../ui/ProductCard";
 import Filters from "../ui/Filtros";
+import SkeletonProductCard from "../ui/SkeletonProductCard";
 import ReviewsSection from "../ui/Review";
 import ProductDescription from "../ui/DescripcionProducto";
 import CaracteristicaProducto from "../ui/CaracteristicaProducto";
@@ -32,210 +30,399 @@ interface Review {
 }
 
 const ITEMS_PER_PAGE = 28;
+const MAX_PRICE = 20000000;
+const DEFAULT_PRICE_RANGE: [number, number] = [0, MAX_PRICE];
+
+interface ProductsApiResponse {
+  productos: Product[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasMore: boolean;
+}
+
+interface CategoryWithSubcategories extends CategoryProps {
+  subcategorias?: CategoryProps[];
+}
+
+const readSavedProductsViewState = () => {
+  if (typeof window === "undefined") return null;
+
+  const saved = sessionStorage.getItem("productsViewState");
+  if (!saved) return null;
+
+  try {
+    return JSON.parse(saved) as {
+      scrollY?: number;
+      search?: string;
+      page?: number;
+      productId?: number;
+      timestamp?: number;
+    };
+  } catch {
+    return null;
+  }
+};
 
 const Producto = () => {
+  const { slug } = useParams<{ slug: string }>();
+  const [savedProductsViewState, setSavedProductsViewState] = useState<ReturnType<typeof readSavedProductsViewState>>(() => (!slug ? readSavedProductsViewState() : null));
   const [productData, setProductData] = useState<Product | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState("");
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [selectedCategory, setSelectedCategory] = useState(() => {
+    if (!savedProductsViewState?.search) return "";
+    return new URLSearchParams(savedProductsViewState.search).get("categoria") || "";
+  });
+  const [searchQuery, setSearchQuery] = useState(() => {
+    if (!savedProductsViewState?.search) return "";
+    return new URLSearchParams(savedProductsViewState.search).get("busqueda") || "";
+  });
   const [sortBy, setSortBy] = useState("rating_desc");
   const [loading, setLoading] = useState(false);
   const [imgUrl, setImgUrl] = useState("");
   const [selectedColor, setSelectedColor] = useState<Product["colores"][0] | null>(null);
-  const [priceRange, setPriceRange] = useState<[number, number]>([0, 20000000]);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [priceRange, setPriceRange] = useState<[number, number]>(() => {
+    if (!savedProductsViewState?.search) return DEFAULT_PRICE_RANGE;
+    const params = new URLSearchParams(savedProductsViewState.search);
+    return [
+      params.get("precioMin") ? Number(params.get("precioMin")) : DEFAULT_PRICE_RANGE[0],
+      params.get("precioMax") ? Number(params.get("precioMax")) : DEFAULT_PRICE_RANGE[1]
+    ];
+  });
+  const [offerOnly, setOfferOnly] = useState(() => {
+    if (!savedProductsViewState?.search) return false;
+    const params = new URLSearchParams(savedProductsViewState.search);
+    return params.get("oferta") === "1" || params.get("oferta") === "true";
+  });
+  const [stockOnly, setStockOnly] = useState(() => {
+    if (!savedProductsViewState?.search) return false;
+    const params = new URLSearchParams(savedProductsViewState.search);
+    return params.get("stock") === "1" || params.get("stock") === "true";
+  });
+  const [currentPage, setCurrentPage] = useState(() => savedProductsViewState?.page || 1);
+  const [includeOutOfStock, setIncludeOutOfStock] = useState(() => {
+    if (!savedProductsViewState?.search) return false;
+    const params = new URLSearchParams(savedProductsViewState.search);
+    return params.get('includeOut') === '1' || params.get('includeOut') === 'true';
+  });
   const [categorySelected, setCategorySelected] = useState<CategoryProps | null>(null);
-  const [categories, setCategories] = useState<CategoryProps[]>([]);
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
-  
-  const { id } = useParams<{ id: string }>();
+  const [categories, setCategories] = useState<CategoryWithSubcategories[]>([]);
+
   const location = useLocation();
   const navigate = useNavigate();
 
-  const isInitializedRef = useRef(false);
+  const requestAbortRef = useRef<AbortController | null>(null);
+  const previousSlugRef = useRef<string | undefined>(slug);
+  const restorationHandledRef = useRef(false);
 
-  const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
+  const [isRestoringState, setIsRestoringState] = useState(() => !!savedProductsViewState && !slug);
 
-  const getCurrentPageProducts = () => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    return filteredProducts.slice(startIndex, endIndex);
-  };
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const previousScrollRestoration = window.history.scrollRestoration;
+    if ("scrollRestoration" in window.history) {
+      window.history.scrollRestoration = "manual";
+    }
+
+    return () => {
+      if ("scrollRestoration" in window.history) {
+        window.history.scrollRestoration = previousScrollRestoration;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const wasDetailPage = !!previousSlugRef.current;
+    const isReturningToList = wasDetailPage && !slug;
+
+    if (isReturningToList) {
+      restorationHandledRef.current = false;
+      const restoredState = readSavedProductsViewState();
+      setSavedProductsViewState(restoredState);
+      setIsRestoringState(!!restoredState);
+
+      if (restoredState?.search) {
+        const params = new URLSearchParams(restoredState.search);
+        setSelectedCategory(params.get("categoria") || "");
+        setSearchQuery(params.get("busqueda") || "");
+        setPriceRange([
+          params.get("precioMin") ? Number(params.get("precioMin")) : DEFAULT_PRICE_RANGE[0],
+          params.get("precioMax") ? Number(params.get("precioMax")) : DEFAULT_PRICE_RANGE[1]
+        ]);
+        setOfferOnly(params.get("oferta") === "1" || params.get("oferta") === "true");
+        setStockOnly(params.get("stock") === "1" || params.get("stock") === "true");
+        setCurrentPage(restoredState.page || 1);
+      }
+    }
+
+    previousSlugRef.current = slug;
+  }, [slug]);
+
+  const totalPages = Math.max(1, Math.ceil(totalProducts / ITEMS_PER_PAGE));
 
   const getUrlParams = useCallback(() => {
     const urlParams = new URLSearchParams(location.search);
     return {
       categoria: urlParams.get('categoria') || '',
-      busqueda: urlParams.get('busqueda') || ''
+      busqueda: urlParams.get('busqueda') || '',
+      precioMin: urlParams.get('precioMin') ? Number(urlParams.get('precioMin')) : 0,
+      precioMax: urlParams.get('precioMax') ? Number(urlParams.get('precioMax')) : MAX_PRICE,
+      oferta: urlParams.get('oferta') === '1' || urlParams.get('oferta') === 'true',
+      stock: urlParams.get('stock') === '1' || urlParams.get('stock') === 'true',
+      includeOut: urlParams.get('includeOut') === '1' || urlParams.get('includeOut') === 'true'
     };
   }, [location.search]);
 
-  // ─── Reset ref al desmontar para permitir recarga al volver ───────────────
+  const getCategoriaApiValue = useCallback((slug: string): string | null => {
+    if (!slug || categories.length === 0) return null;
+
+    const parent = categories.find((cat) => cat.slug === slug);
+    if (parent) return parent.nombre;
+
+    for (const cat of categories) {
+      const child = cat.subcategorias?.find((sub) => sub.slug === slug);
+      if (child) return `${cat.nombre} → ${child.nombre}`;
+    }
+
+    return null;
+  }, [categories]);
+
+  const applySort = useCallback((products: Product[]) => {
+    const sorted = [...products];
+    sorted.sort((a, b) => {
+      switch (sortBy) {
+        case "name_asc":
+          return a.nombreproducto.localeCompare(b.nombreproducto);
+        case "name_desc":
+          return b.nombreproducto.localeCompare(a.nombreproducto);
+        case "price_asc":
+          return (a.lista1 || 0) - (b.lista1 || 0);
+        case "price_desc":
+          return (b.lista1 || 0) - (a.lista1 || 0);
+        case "rating_desc":
+          return (b.puntuacionPromedio || 0) - (a.puntuacionPromedio || 0);
+        default:
+          return 0;
+      }
+    });
+    return sorted;
+  }, [sortBy]);
+
+  const fetchProducts = useCallback(async (pageToLoad: number) => {
+    if (slug) return;
+
+    if (requestAbortRef.current) {
+      requestAbortRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    requestAbortRef.current = controller;
+
+    try {
+      setLoading(true);
+
+      const params = new URLSearchParams();
+      params.set("page", pageToLoad.toString());
+      params.set("limit", ITEMS_PER_PAGE.toString());
+      params.set("visibilidad", "visibles");
+      if (!includeOutOfStock) {
+        params.set("cantidadMin", "1");
+      }
+
+      if (searchQuery.trim()) {
+        params.set("search", searchQuery.trim());
+      }
+
+      const categoriaApi = getCategoriaApiValue(selectedCategory);
+      if (selectedCategory && categoriaApi) {
+        params.set("categoria", categoriaApi);
+      }
+
+      if (priceRange[0] > DEFAULT_PRICE_RANGE[0]) {
+        params.set("precioMin", priceRange[0].toString());
+      }
+
+      if (priceRange[1] < DEFAULT_PRICE_RANGE[1]) {
+        params.set("precioMax", priceRange[1].toString());
+      }
+
+      if (offerOnly) {
+        params.set("oferta", "1");
+      }
+
+      if (stockOnly) {
+        params.set("stock", "1");
+      }
+      if (includeOutOfStock) {
+        params.set("includeOut", "1");
+      }
+
+      const response = await fetch(
+        `${config?.baseUrl}${config?.apiPrefix}/products?${params.toString()}`,
+        {
+          signal: controller.signal,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Error HTTP ${response.status}`);
+      }
+
+      const data: ProductsApiResponse = await response.json();
+
+      if (requestAbortRef.current !== controller) return;
+
+      setFilteredProducts(applySort(data.productos || []));
+      setTotalProducts(data.total || 0);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+
+      console.error("❌ Error al cargar productos:", error);
+      toast.error("Error al cargar los productos");
+      setFilteredProducts([]);
+      setTotalProducts(0);
+    } finally {
+      if (requestAbortRef.current === controller) {
+        setLoading(false);
+      }
+    }
+  }, [slug, searchQuery, selectedCategory, priceRange, getCategoriaApiValue, applySort]);
+
   useEffect(() => {
     return () => {
-      isInitializedRef.current = false;
+      if (requestAbortRef.current) {
+        requestAbortRef.current.abort();
+        requestAbortRef.current = null;
+      }
     };
   }, []);
 
-  // ─── EFFECT PRINCIPAL - Carga inicial de datos ────────────────────────────
+  // ─── Carga de detalle de producto ─────────────────────────────────────────
   useEffect(() => {
-    const fetchInitialData = async () => {
+    if (!slug) {
+      setProductData(null);
+      setReviews([]);
+      return;
+    }
+
+    const fetchProductData = async () => {
       try {
         setLoading(true);
-        
-        if (id) {
-          // ── VISTA INDIVIDUAL ──────────────────────────────────────────────
-          setProductData(null);
+        setImgUrl("");
+        setSelectedColor(null);
+
+        const data = await getData(`${config?.baseUrl}${config?.apiPrefix}/products/${slug}`);
+
+        // Allow viewing products that are out of stock, but prevent inactive products
+        if (data && !data.activo) {
+          navigate('/productos');
+          toast.error('Este producto no está disponible');
+          return;
+        }
+
+        setProductData(data);
+
+        // Usar reseñas incluidas en la respuesta del producto cuando estén disponibles
+        if (data && Array.isArray(data.reviews)) {
+          setReviews(data.reviews as Review[]);
+        } else {
           setReviews([]);
-          setImgUrl("");
-          setSelectedColor(null);
-          
-          const data = await getData(`${config?.baseUrl}${config?.apiPrefix}/products/${id}`);
-          
-          if (data && (!data.activo || (data.cantidad || 0) <= 0)) {
-            navigate('/productos');
-            toast.error('Este producto no está disponible o está agotado');
-            return;
-          }
-          
-          setProductData(data);
-
-          const reviewsResponse = await getData(`${config?.baseUrl}${config?.apiPrefix}/reviews?productId=${id}`);
-          if (Array.isArray(reviewsResponse)) {
-            const filteredReviews = reviewsResponse.filter(review => review.id_producto === Number(id));
-            setReviews(filteredReviews);
-          }
-
-        } else if (!isInitializedRef.current) {
-          console.log('📄 Cargando datos del listado...');
-
-          // ── FIX: Loop paginado para traer TODOS los productos ─────────────
-          let productsData: any[] = [];
-          let cursor: number | null = null;
-
-          do {
-            const url = `${config?.baseUrl}${config?.apiPrefix}/products?limit=100${cursor ? `&cursor=${cursor}` : ""}`;
-            const res = await getData(url);
-            const page = res?.productos || [];
-            productsData = [...productsData, ...page];
-            cursor = res?.nextCursor ?? null;
-            console.log(`📦 Página cargada: ${page.length} productos | Total acumulado: ${productsData.length} | hasMore: ${res?.hasMore}`);
-          } while (cursor !== null);
-
-          // Cargar categorías y reseñas en paralelo (ya tenemos todos los productos)
-          const [categoriesData, allReviewsData] = await Promise.all([
-            getData(`${config?.baseUrl}${config?.apiPrefix}/categories`),
-            fetch(`${config?.baseUrl}${config?.apiPrefix}/reviews`, {
-              cache: 'no-store'
-            }).then(res => res.json())
-          ]);
-
-          console.log('📦 Datos cargados:', {
-            totalProductos: productsData.length,
-            totalCategorias: categoriesData.length,
-            totalReseñas: allReviewsData.length
-          });
-
-          // Mapa de categorías por slug para búsqueda rápida
-          const categoriasMap = new Map();
-          categoriesData.forEach((cat: CategoryProps) => {
-            categoriasMap.set(cat.slug, cat);
-          });
-
-          // Filtrar solo activos con stock
-          const productosActivos = productsData.filter((product: any) => {
-            const tieneStock = (product.cantidad || 0) > 0;
-            const estaActivo = product.activo === true;
-            return estaActivo && tieneStock;
-          });
-
-          console.log('✅ Productos activos con stock:', productosActivos.length);
-
-          const enhancedProducts = productosActivos.map((product: any) => {
-            const productReviews = Array.isArray(allReviewsData)
-              ? allReviewsData.filter((review: any) =>
-                  Number(review.id_producto) === Number(product.idproducto)
-                )
-              : [];
-
-            const reviewCount = productReviews.length;
-            const averageRating = reviewCount > 0
-              ? productReviews.reduce((acc: number, rev: any) => acc + rev.calificacion, 0) / reviewCount
-              : 0;
-
-            // ── FIX: Preservar el string original de categorías correctamente ──
-            let categoriasAdaptadas: any[] = [];
-            let categoriasRaw: string | null = null;
-
-            if (Array.isArray(product.categorias)) {
-              categoriasAdaptadas = product.categorias;
-            } else if (typeof product.categorias === 'string') {
-              categoriasRaw = product.categorias;
-              categoriasAdaptadas = product.categorias; // string directo al ProductCard
-            }
-
-            return {
-              ...product,
-              categorias: categoriasAdaptadas,
-              _categoriasRaw: categoriasRaw,   // string original del listado
-              _categoriasMap: categoriasMap,    // mapa para resolver slugs
-              enStock: true,
-              reseñasCount: reviewCount,
-              puntuacionPromedio: averageRating,
-              reviews: productReviews.map((rev: any) => ({ calificacion: rev.calificacion })),
-            };
-          });
-
-          // Construir árbol de categorías activas
-          const categoriasActivas = categoriesData.filter((cat: CategoryProps) => cat.activo === true);
-          const parentCategories = categoriasActivas.filter((cat: CategoryProps) => cat.padre_id === null);
-          const childCategories  = categoriasActivas.filter((cat: CategoryProps) => cat.padre_id !== null);
-
-          const categoriesWithSubcategories = parentCategories.map((parent: CategoryProps) => ({
-            ...parent,
-            subcategorias: childCategories.filter((child: CategoryProps) => child.padre_id === parent.id)
-          }));
-
-          setCategories(categoriesWithSubcategories);
-          setAllProducts(enhancedProducts);
-
-          const { categoria } = getUrlParams();
-          if (categoria) {
-            console.log('🎯 Categoría inicial desde URL:', categoria);
-            setSelectedCategory(categoria);
-          } else {
-            setFilteredProducts(enhancedProducts);
-          }
-
-          isInitializedRef.current = true;
         }
       } catch (error) {
-        console.error("❌ Error al cargar los datos iniciales:", error);
-        toast.error('Error al cargar los productos');
+        console.error("❌ Error al cargar detalle del producto:", error);
+        toast.error('Error al cargar el producto');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchInitialData();
-  }, [id, navigate, getUrlParams]);
+    fetchProductData();
+  }, [slug, navigate]);
+
+  // ─── Carga árbol de categorías activas para filtros ──────────────────────
+  useEffect(() => {
+    if (slug) return;
+
+    const fetchCategories = async () => {
+      try {
+        const categoriesData = await getData(`${config?.baseUrl}${config?.apiPrefix}/categories`);
+        const categoriasActivas = categoriesData.filter((cat: CategoryProps) => cat.activo === true);
+        const parentCategories = categoriasActivas.filter((cat: CategoryProps) => cat.padre_id === null);
+        const childCategories = categoriasActivas.filter((cat: CategoryProps) => cat.padre_id !== null);
+
+        const categoriesWithSubcategories: CategoryWithSubcategories[] = parentCategories.map((parent: CategoryProps) => ({
+          ...parent,
+          subcategorias: childCategories.filter((child: CategoryProps) => child.padre_id === parent.id),
+        }));
+
+        setCategories(categoriesWithSubcategories);
+      } catch (error) {
+        console.error("❌ Error cargando categorías:", error);
+      }
+    };
+
+    fetchCategories();
+  }, [slug]);
 
   // ─── Detecta cambios en URL ───────────────────────────────────────────────
   useEffect(() => {
-    if (!isInitializedRef.current || id) return;
+    if (slug) return;
 
-    const { categoria } = getUrlParams();
-    console.log('🔄 URL cambió, actualizando categoría:', categoria);
+    const { categoria, busqueda, precioMin, precioMax, oferta, stock, includeOut } = getUrlParams();
     setSelectedCategory(categoria);
-    setCurrentPage(1);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [location.search, getUrlParams, id]);
+    setSearchQuery(busqueda);
+    setPriceRange([precioMin, precioMax]);
+    setOfferOnly(!!oferta);
+    setStockOnly(!!stock);
+    setIncludeOutOfStock(!!includeOut);
+  }, [location.search, getUrlParams, slug]);
+
+  // ─── Carga de productos paginados con filtros en servidor ────────────────
+  useEffect(() => {
+    if (slug) return;
+    fetchProducts(currentPage);
+  }, [slug, currentPage, fetchProducts]);
+
+  useLayoutEffect(() => {
+    if (slug || !isRestoringState || restorationHandledRef.current || loading || filteredProducts.length === 0) return;
+
+    const savedProductId = savedProductsViewState?.productId;
+    const productAnchor = savedProductId
+      ? document.querySelector(`[data-product-id="${savedProductId}"]`)
+      : null;
+
+    if (productAnchor instanceof HTMLElement) {
+      const elementTop = productAnchor.getBoundingClientRect().top + window.pageYOffset;
+      window.scrollTo({ top: Math.max(elementTop - 72, 0), behavior: "auto" });
+    } else {
+      const scrollY = savedProductsViewState?.scrollY || 0;
+      window.scrollTo({ top: scrollY, behavior: "auto" });
+    }
+
+    setIsRestoringState(false);
+    restorationHandledRef.current = true;
+    sessionStorage.removeItem("productsViewState");
+  }, [slug, isRestoringState, loading, filteredProducts.length, savedProductsViewState]);
+
+  // ─── Reordenar resultados actuales sin recargar API ──────────────────────
+  useEffect(() => {
+    if (slug || filteredProducts.length === 0) return;
+    setFilteredProducts((prev) => applySort(prev));
+  }, [sortBy, slug, applySort]);
 
   // ─── Scroll al top al ver producto individual ─────────────────────────────
-  useEffect(() => {
-    if (id) window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [id]);
+  useLayoutEffect(() => {
+    if (slug) window.scrollTo({ top: 0, behavior: 'auto' });
+  }, [slug]);
 
   // ─── Resuelve la categoría seleccionada en el árbol ───────────────────────
   useEffect(() => {
@@ -263,110 +450,39 @@ const Producto = () => {
     setCategorySelected(foundCategory || null);
   }, [selectedCategory, categories]);
 
-  // ─── Aplica filtros y orden ───────────────────────────────────────────────
-  useEffect(() => {
-    if (allProducts.length === 0) {
-      console.log('⏳ Esperando productos...');
-      return;
-    }
-
-    const { busqueda } = getUrlParams();
-
-    console.log('🔍 Aplicando filtros:', {
-      productosDisponibles: allProducts.length,
-      selectedCategory,
-      busqueda,
-      priceRange
-    });
-
-    const sortedAndFiltered = allProducts
-      .filter(product => {
-        // Filtro de búsqueda
-        if (busqueda) {
-          const searchLower = busqueda.toLowerCase();
-          const matchesSearch =
-            product.nombreproducto.toLowerCase().includes(searchLower) ||
-            (product.descripcion && product.descripcion.toLowerCase().includes(searchLower));
-          if (!matchesSearch) return false;
-        }
-
-  
-      if (selectedCategory) {
-        if (Array.isArray(product.categorias) && product.categorias.length > 0) {
-          const belongs = product.categorias.some((pc: any) => {
-            const slugHijo  = pc.categoria?.slug;
-            const slugPadre = pc.categoria?.padre?.slug;
-            return slugHijo === selectedCategory || slugPadre === selectedCategory;
-          });
-          if (!belongs) return false;
-
-        } else if ((product as any)._categoriasRaw) {
-          const raw = (product as any)._categoriasRaw as string;
-          const categoriaSeleccionada = (product as any)._categoriasMap?.get(selectedCategory);
-          if (!categoriaSeleccionada) return false;
-
-          const nombreBuscado = categoriaSeleccionada.nombre.toLowerCase().trim();
-          const esPadre = categoriaSeleccionada.padre_id === null;
-          const rawLower = raw.toLowerCase();
-
-          let coincide = false;
-
-          if (esPadre) {
-            // FIX: regex para padre que puede tener comas en su nombre
-            const regex = new RegExp(`(^|,\\s*)${nombreBuscado.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*(–|→|$|,)`, 'i');
-            coincide = regex.test(rawLower);
-          } else {
-            // Para hijo: buscar el nombre exacto después de un separador
-            const regex = new RegExp(`(–|→)\\s*${nombreBuscado.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*(,|$)`, 'i');
-            coincide = regex.test(rawLower);
-          }
-
-          if (!coincide) return false;
-        } else {
-          return false;
-        }
-      }
-        // Filtro de precio
-        const inPriceRange =
-          (product.lista1 >= priceRange[0] && product.lista1 <= priceRange[1]) ||
-          (product.lista2 >= priceRange[0] && product.lista2 <= priceRange[1]);
-
-        return inPriceRange;
-      })
-      .sort((a, b) => {
-        switch (sortBy) {
-          case "name_asc":  return a.nombreproducto.localeCompare(b.nombreproducto);
-          case "name_desc": return b.nombreproducto.localeCompare(a.nombreproducto);
-          case "price_asc": return (a.lista2 || a.lista1) - (b.lista2 || b.lista1);
-          case "price_desc": return (b.lista2 || b.lista1) - (a.lista2 || a.lista1);
-          case "rating_desc": return (b.puntuacionPromedio || 0) - (a.puntuacionPromedio || 0);
-          default: return 0;
-        }
-      });
-
-    console.log('✅ Productos después de filtros:', sortedAndFiltered.length);
-    setFilteredProducts(sortedAndFiltered);
-    setCurrentPage(1);
-  }, [allProducts, selectedCategory, sortBy, priceRange, getUrlParams]);
-
   // ─── Cambio de categoría ──────────────────────────────────────────────────
   const handleCategoryChange = useCallback((category: string) => {
-    console.log('🎯 Cambiando categoría a:', category);
-
-    const currentUrl = new URL(window.location.href);
-    currentUrl.searchParams.delete('categoria');
-    currentUrl.searchParams.delete('busqueda');
-    if (category) currentUrl.searchParams.set('categoria', category);
-
-    window.history.pushState({}, '', currentUrl.toString());
-    setSelectedCategory(category);
+    const params = new URLSearchParams(location.search);
+    if (category) {
+      params.set("categoria", category);
+    } else {
+      params.delete("categoria");
+    }
+    navigate(`/productos${params.toString() ? `?${params.toString()}` : ""}`);
     setCurrentPage(1);
-  }, []);
+  }, [location.search, navigate]);
+  const handlePriceRangeChange = useCallback((range: [number, number]) => {
+    const params = new URLSearchParams(location.search);
+    if (range[0] > 0) {
+      params.set("precioMin", range[0].toString());
+    } else {
+      params.delete("precioMin");
+    }
+
+    if (range[1] < MAX_PRICE) {
+      params.set("precioMax", range[1].toString());
+    } else {
+      params.delete("precioMax");
+    }
+
+    navigate(`/productos${params.toString() ? `?${params.toString()}` : ""}`);
+    setCurrentPage(1);
+  }, [location.search, navigate]);
 
   // ─── Imagen y color inicial del producto individual ───────────────────────
   useEffect(() => {
     if (productData?.imagenes) setImgUrl(getProductImage(productData.imagenes));
-    if (productData?.colores)  setSelectedColor(productData.colores[0] || null);
+    if (productData?.colores) setSelectedColor(productData.colores[0] || null);
   }, [productData]);
 
   const handleAddReview = (newReview: Review) => {
@@ -385,6 +501,16 @@ const Producto = () => {
         ],
       };
     });
+    // Also update local `reviews` state so averages and counts refresh immediately
+    setReviews((prev) => [
+      ...prev,
+      {
+        ...newReview,
+        fecha_review: newReview.fecha_review instanceof Date
+          ? newReview.fecha_review
+          : new Date(newReview.fecha_review),
+      },
+    ]);
   };
 
   const getPageNumbers = () => {
@@ -450,14 +576,14 @@ const Producto = () => {
     return "Sin categoría";
   };
 
-  const isLista2Active  = productData?.lista2_activa === true;
-  const hasLista2Price  = productData?.lista2 && productData.lista2 > 0;
-  const showLista2      = isLista2Active && hasLista2Price;
+  const isLista2Active = productData?.lista2_activa === true;
+  const hasLista2Price = productData?.lista2 && productData.lista2 > 0;
+  const showLista2 = isLista2Active && hasLista2Price;
 
-  if (loading) return <Loading />;
+  if (loading && !slug && filteredProducts.length === 0 && !isRestoringState) return <Loading />;
 
   // ─── VISTA INDIVIDUAL DEL PRODUCTO ───────────────────────────────────────
-  if (id && productData) {
+  if (slug && productData) {
     return (
       <Container>
         <div className="flex flex-col">
@@ -469,11 +595,10 @@ const Producto = () => {
                     src={getProductImage([item])}
                     alt={item.alt_text || "Imagen del producto"}
                     key={item.id ?? index}
-                    className={`w-24 h-24 object-cover cursor-pointer rounded-lg ${
-                      imgUrl === getProductImage([item])
+                    className={`w-24 h-24 object-cover cursor-pointer rounded-lg ${imgUrl === getProductImage([item])
                         ? "border-2 border-amber-500"
                         : "border border-gray-200 hover:border-amber-300"
-                    }`}
+                      }`}
                     onClick={() => setImgUrl(getProductImage([item]))}
                   />
                 ))}
@@ -564,11 +689,10 @@ const Producto = () => {
                   {productData.colores.map((item) => (
                     <div
                       key={item.codigoHex}
-                      className={`${
-                        item.codigoHex === selectedColor?.codigoHex
+                      className={`${item.codigoHex === selectedColor?.codigoHex
                           ? "border border-black p-1 rounded-full"
                           : "border-transparent"
-                      }`}
+                        }`}
                     >
                       <div
                         className="w-10 h-10 rounded-full cursor-pointer"
@@ -628,20 +752,20 @@ const Producto = () => {
 
           <CaracteristicaProducto producto={productData} />
           <ProductDescription product={productData} />
-          <ReviewsSection productId={id} onAddReview={handleAddReview} />
+          <ReviewsSection productId={String(productData.id)} onAddReview={handleAddReview} />
         </div>
       </Container>
     );
   }
 
   // ─── VISTA DE LISTADO DE PRODUCTOS ───────────────────────────────────────
-  const { busqueda } = getUrlParams();
+  const busqueda = searchQuery;
 
   return (
     <div className="min-h-screen bg-white">
       <div className="w-full px-2 sm:px-4 lg:px-6 xl:px-8 py-4">
         <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
-          <div className="w-full lg:w-64 xl:w-72 flex-shrink-0">
+          <div className="w-full lg:w-72 xl:w-80 flex-shrink-0">
             <div className="bg-white border border-gray-200 rounded-lg p-3 lg:p-4 sticky top-4">
               <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-200">
                 <HiAdjustments className="w-5 h-5 text-gray-700" />
@@ -651,7 +775,13 @@ const Producto = () => {
                 selectedCategory={selectedCategory}
                 priceRange={priceRange}
                 onCategoryChange={handleCategoryChange}
-                onPriceRangeChange={setPriceRange}
+                onPriceRangeChange={handlePriceRangeChange}
+                includeOutOfStock={includeOutOfStock}
+                onIncludeOutOfStockChange={(v: boolean) => {
+                  const params = new URLSearchParams(location.search);
+                  if (v) params.set('includeOut', '1'); else params.delete('includeOut');
+                  navigate(`/productos${params.toString() ? `?${params.toString()}` : ''}`);
+                }}
               />
             </div>
           </div>
@@ -660,7 +790,7 @@ const Producto = () => {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 bg-white border border-gray-200 rounded-lg p-4">
               <div className="flex items-center gap-4">
                 <p className="text-gray-700">
-                  <span className="font-bold">{filteredProducts.length}</span> productos encontrados
+                  <span className="font-bold">{totalProducts}</span> productos encontrados
                 </p>
 
                 <div className="flex items-center gap-2 flex-wrap">
@@ -678,10 +808,9 @@ const Producto = () => {
                       <span>Búsqueda: "{busqueda}"</span>
                       <button
                         onClick={() => {
-                          const currentUrl = new URL(window.location.href);
-                          currentUrl.searchParams.delete('busqueda');
-                          window.history.pushState({}, '', currentUrl.toString());
-                          window.location.reload();
+                          const params = new URLSearchParams(location.search);
+                          params.delete("busqueda");
+                          navigate(`/productos${params.toString() ? `?${params.toString()}` : ""}`);
                         }}
                         className="hover:text-blue-800"
                       >
@@ -708,7 +837,16 @@ const Producto = () => {
               </div>
             </div>
 
-            {filteredProducts.length === 0 ? (
+            {loading && filteredProducts.length === 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-3 lg:gap-4">
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <div key={i} className="group">
+                    {/* @ts-ignore */}
+                    <SkeletonProductCard />
+                  </div>
+                ))}
+              </div>
+            ) : filteredProducts.length === 0 ? (
               <div className="bg-white border border-gray-200 rounded-lg p-12 text-center">
                 <div className="text-gray-400 text-6xl mb-4">🔍</div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
@@ -718,16 +856,18 @@ const Producto = () => {
                   {busqueda
                     ? `No hay productos que coincidan con "${busqueda}"`
                     : selectedCategory && categorySelected
-                    ? `No hay productos disponibles en la categoría "${categorySelected.nombre}"`
-                    : "Intenta ajustar los filtros o busca productos diferentes"}
+                      ? `No hay productos disponibles en la categoría "${categorySelected.nombre}"`
+                      : "Intenta ajustar los filtros o busca productos diferentes"}
                 </p>
                 <button
                   onClick={() => {
                     handleCategoryChange("");
-                    setPriceRange([0, 20000000]);
-                    const currentUrl = new URL(window.location.href);
-                    currentUrl.searchParams.delete('busqueda');
-                    window.history.pushState({}, '', currentUrl.toString());
+                    setPriceRange(DEFAULT_PRICE_RANGE);
+                    const params = new URLSearchParams(location.search);
+                    params.delete("busqueda");
+                    params.delete("categoria");
+                    navigate(`/productos${params.toString() ? `?${params.toString()}` : ""}`);
+                    setCurrentPage(1);
                   }}
                   className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
                 >
@@ -737,7 +877,7 @@ const Producto = () => {
             ) : (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-3 lg:gap-4">
-                  {getCurrentPageProducts().map((item: Product) => (
+                  {filteredProducts.map((item: Product) => (
                     <div key={item.idproducto} className="group">
                       <ProductCard item={item} />
                     </div>
@@ -751,6 +891,7 @@ const Producto = () => {
                         onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                         disabled={currentPage === 1}
                         className="p-2 rounded-md text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        aria-label="Página anterior"
                       >
                         <IoChevronBack className="w-5 h-5" />
                       </button>
@@ -759,13 +900,13 @@ const Producto = () => {
                         <button
                           key={index}
                           onClick={() => typeof pageNum === "number" && setCurrentPage(pageNum)}
-                          className={`px-4 py-2 text-sm rounded-md transition-colors ${
-                            pageNum === currentPage
+                          aria-label={typeof pageNum === 'number' ? `Ir a la página ${pageNum}` : undefined}
+                          className={`px-4 py-2 text-sm rounded-md transition-colors ${pageNum === currentPage
                               ? "bg-orange-500 text-white"
                               : pageNum === "..."
-                              ? "cursor-default text-gray-400"
-                              : "text-gray-600 hover:bg-gray-100 border border-gray-300"
-                          }`}
+                                ? "cursor-default text-gray-400"
+                                : "text-gray-600 hover:bg-gray-100 border border-gray-300"
+                            }`}
                         >
                           {pageNum}
                         </button>
@@ -775,6 +916,7 @@ const Producto = () => {
                         onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
                         disabled={currentPage === totalPages}
                         className="p-2 rounded-md text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        aria-label="Página siguiente"
                       >
                         <IoChevronForward className="w-5 h-5" />
                       </button>

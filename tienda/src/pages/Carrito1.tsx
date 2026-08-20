@@ -100,7 +100,7 @@ const Carrito = () => {
                       
                       {/* Imagen y detalles del producto */}
                       <div className="lg:col-span-5 flex gap-4 items-center">
-                        <Link to={`/productos/${product.idproducto}`}>
+                        <Link to={`/productos/${product.slug || product.idproducto}`}>
                           <img
                             src={mainImage}
                             alt={fallbackImageAlt}
@@ -108,7 +108,7 @@ const Carrito = () => {
                           />
                         </Link>
                         <div className="flex-1">
-                          <Link to={`/productos/${product.idproducto}`}>
+                          <Link to={`/productos/${product.slug || product.idproducto}`}>
                             <h3 className="text-sm font-normal text-gray-900 mb-1 hover:text-red-600 transition-colors">
                               {product.nombreproducto}
                             </h3>
